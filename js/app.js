@@ -13,6 +13,7 @@
     main: null,
     courseId: null,
     marks: {}, // studentId -> absent|late
+    inputDate: null, // YYYY-MM-DD for past attendance; null = today
     seatingCtrl: null,
   };
 
@@ -189,6 +190,7 @@
         state.main = item.id;
         state.courseId = null;
         state.marks = {};
+        state.inputDate = null;
         state.seatingCtrl = null;
         render();
       });
@@ -210,6 +212,7 @@
         state.courseId = c.id;
         if (state.main !== "roster") {
           state.marks = {};
+          state.inputDate = null;
           state.seatingCtrl = null;
         }
         render();
@@ -621,14 +624,25 @@
 
   /* ---------- input ---------- */
 
+  function inputTargetDate() {
+    return state.inputDate && Attendance.isValidDateStr(state.inputDate)
+      ? state.inputDate
+      : Attendance.todayStr();
+  }
+
   function renderInput() {
     const panel = document.createElement("div");
     panel.className = "panel";
     const course = currentCourse();
+    const targetDate = inputTargetDate();
+    const isPast = !!state.inputDate;
 
     const head = document.createElement("div");
     head.className = "panel-head";
-    head.innerHTML = `<h2>出欠の入力${course ? " — " + escapeHtml(course.name) : ""}</h2>`;
+    const titleParts = ["出欠の入力"];
+    if (course) titleParts.push(" — " + course.name);
+    if (isPast) titleParts.push(`（${Attendance.formatDateLabel(targetDate, 1)}）`);
+    head.innerHTML = `<h2>${titleParts.map(escapeHtml).join("")}</h2>`;
 
     if (!course) {
       panel.appendChild(head);
@@ -655,13 +669,37 @@
     actions.className = "panel-actions";
     const legend = document.createElement("span");
     legend.className = "hint";
-    legend.textContent = "タップ: 欠席 → 遅刻 → 出席";
+    legend.textContent = isPast
+      ? `${Attendance.formatDateLabel(targetDate, 1)} の出欠 ／ タップ: 欠席 → 遅刻 → 出席`
+      : "タップ: 欠席 → 遅刻 → 出席";
+    actions.appendChild(legend);
+
+    if (isPast) {
+      const btnToday = document.createElement("button");
+      btnToday.type = "button";
+      btnToday.className = "box-btn";
+      btnToday.textContent = "今日の入力に戻る";
+      btnToday.addEventListener("click", () => {
+        state.inputDate = null;
+        state.marks = {};
+        render();
+      });
+      actions.appendChild(btnToday);
+    } else {
+      const btnPast = document.createElement("button");
+      btnPast.type = "button";
+      btnPast.className = "box-btn";
+      btnPast.textContent = "過去の出欠入力";
+      btnPast.addEventListener("click", () => onPastInput());
+      actions.appendChild(btnPast);
+    }
+
     const btnRecord = document.createElement("button");
     btnRecord.type = "button";
     btnRecord.className = "box-btn";
     btnRecord.textContent = "記録";
     btnRecord.addEventListener("click", () => onRecord(course));
-    actions.append(legend, btnRecord);
+    actions.appendChild(btnRecord);
     head.appendChild(actions);
     panel.appendChild(head);
 
@@ -672,7 +710,6 @@
     grid.className = "input-seat-grid";
     const seats = Seating.normalize(course.seats);
     const sorted = Roster.sortStudents(course.students);
-    const today = Attendance.todayStr();
 
     // Hide rows that have no assigned seats at all
     const activeRows = [];
@@ -698,7 +735,7 @@
             cell.classList.add("empty-slot");
             cell.disabled = true;
           } else {
-            const withdrawn = Roster.isWithdrawnOn(stu, today);
+            const withdrawn = Roster.isWithdrawnOn(stu, targetDate);
             if (withdrawn) {
               cell.classList.add("withdrawn");
               cell.disabled = true;
@@ -734,20 +771,63 @@
     el.contents.appendChild(panel);
   }
 
+  async function onPastInput() {
+    const yesterday = Attendance.yesterdayStr();
+    const r = await showModal({
+      message: "出欠を入力する日付を選んでください。",
+      input: {
+        type: "date",
+        value: state.inputDate || yesterday,
+        max: yesterday,
+      },
+      buttons: [
+        { label: "キャンセル", action: "cancel" },
+        { label: "この日付で入力", action: "ok" },
+      ],
+    });
+    if (r.action !== "ok") return;
+    if (!Attendance.isValidDateStr(r.value)) {
+      await alertModal("日付を選択してください。");
+      return;
+    }
+    if (r.value > yesterday) {
+      await alertModal("今日より前の日付を選んでください。");
+      return;
+    }
+    state.inputDate = r.value;
+    state.marks = {};
+    render();
+  }
+
   async function onRecord(course) {
     if (!(await ensureFolder())) return;
 
-    let result = Attendance.recordSession(course, state.marks, { forceAdd: false });
+    const date = inputTargetDate();
+    let result = Attendance.recordSession(course, state.marks, {
+      forceAdd: false,
+      date,
+    });
     if (result.needConfirm) {
-      const ok = await confirmModal("すでに記録されています。加算しますか？");
+      const label = Attendance.formatDateLabel(date, 1);
+      const ok = await confirmModal(
+        `${label} はすでに記録されています。加算しますか？`
+      );
       if (!ok) return;
-      result = Attendance.recordSession(course, state.marks, { forceAdd: true });
+      result = Attendance.recordSession(course, state.marks, {
+        forceAdd: true,
+        date,
+      });
     }
 
     try {
       await saveData();
       state.marks = {};
-      await alertModal("出欠を記録しました。");
+      const label = Attendance.formatDateLabel(date, 1);
+      await alertModal(
+        state.inputDate
+          ? `${label} の出欠を記録しました。`
+          : "出欠を記録しました。"
+      );
       render();
     } catch (_) {
       // Roll back the session added in memory

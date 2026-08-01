@@ -539,7 +539,6 @@ table.edit-matrix td.locked-cell {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  border-top: 1px solid #eee;
 }
 
 table.edit-matrix {
@@ -567,6 +566,11 @@ table.edit-matrix thead th {
   top: 0;
   z-index: 2;
   background: #fafafa;
+  border-top: none;
+}
+
+table.edit-matrix thead th:not(.sticky-col) {
+  border-top: none;
 }
 
 /* 年・組・番・氏名 — separate sticky cols, no vertical rules */

@@ -19,6 +19,20 @@ const Attendance = (() => {
     return `${y}-${m}-${day}`;
   }
 
+  /** Yesterday as YYYY-MM-DD (for past-attendance date pickers). */
+  function yesterdayStr() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function isValidDateStr(dateStr) {
+    return typeof dateStr === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateStr);
+  }
+
   function formatDateLabel(dateStr, sessionIndex) {
     const [, m, d] = dateStr.split("-");
     const base = `${Number(m)}/${Number(d)}`;
@@ -35,12 +49,12 @@ const Attendance = (() => {
     return Math.max(...list.map((s) => s.sessionIndex || 1)) + 1;
   }
 
-  function buildStatusesFromMarks(course, marks) {
-    const date = todayStr();
+  function buildStatusesFromMarks(course, marks, dateStr) {
+    const date = isValidDateStr(dateStr) ? dateStr : todayStr();
     const statuses = {};
     for (const stu of course.students) {
       if (Roster.isWithdrawnOn(stu, date)) {
-        // Withdrawn on/after today: not counted; store as present for schema consistency
+        // Withdrawn on/after the session date: not counted; store as present for schema consistency
         statuses[stu.id] = "present";
         continue;
       }
@@ -52,8 +66,8 @@ const Attendance = (() => {
     return statuses;
   }
 
-  function recordSession(course, marks, { forceAdd } = {}) {
-    const date = todayStr();
+  function recordSession(course, marks, { forceAdd, date: dateOpt } = {}) {
+    const date = isValidDateStr(dateOpt) ? dateOpt : todayStr();
     const existing = sessionsOnDate(course, date);
     if (existing.length && !forceAdd) {
       return { needConfirm: true, date, count: existing.length };
@@ -62,7 +76,7 @@ const Attendance = (() => {
       id: Storage.uid("sess"),
       date,
       sessionIndex: nextSessionIndex(course, date),
-      statuses: buildStatusesFromMarks(course, marks),
+      statuses: buildStatusesFromMarks(course, marks, date),
     };
     if (!course.sessions) course.sessions = [];
     course.sessions.push(session);
@@ -107,6 +121,8 @@ const Attendance = (() => {
   return {
     STATUS,
     todayStr,
+    yesterdayStr,
+    isValidDateStr,
     formatDateLabel,
     sessionsOnDate,
     recordSession,
