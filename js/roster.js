@@ -2,6 +2,8 @@
 
 const Roster = (() => {
   const MAX_COURSES = 15;
+  const ROWS = 8;
+  const COLS = 6;
 
   function sortStudents(students) {
     return [...students].sort((a, b) => {
@@ -19,9 +21,13 @@ const Roster = (() => {
   }
 
   function labelStudent(s) {
-    const num = String(s.number ?? "");
-    const padded = num.length === 1 ? ` ${num}` : num;
-    return `${s.year}年${s.class}組${padded}番`;
+    return `${s.year}年${s.class}組${s.number ?? ""}番`;
+  }
+
+  /** True if student is withdrawn on (or before) dateStr (YYYY-MM-DD). */
+  function isWithdrawnOn(student, dateStr) {
+    if (!student || !student.withdrawnDate || !dateStr) return false;
+    return dateStr >= student.withdrawnDate;
   }
 
   function parseWorkbook(arrayBuffer) {
@@ -78,8 +84,8 @@ const Roster = (() => {
   }
 
   function createEmptySeats() {
-    // 8 rows x 6 cols, teacher desk is separate UI under the grid
-    return Array.from({ length: 8 }, () => Array(6).fill(null));
+    // Teacher desk is separate UI under the grid
+    return Array.from({ length: ROWS }, () => Array(COLS).fill(null));
   }
 
   function upsertCourse(data, name, students) {
@@ -98,15 +104,47 @@ const Roster = (() => {
     return { course, created: true };
   }
 
+  function renameCourse(data, courseId, newName) {
+    const name = String(newName || "").trim();
+    if (!name) throw new Error("講座名を入力してください。");
+    const course = findCourse(data, courseId);
+    if (!course) throw new Error("講座が見つかりません。");
+    const clash = findCourseByName(data, name);
+    if (clash && clash.id !== courseId) {
+      throw new Error(`「${name}」は既にあります。別名を入力してください。`);
+    }
+    course.name = name;
+    return course;
+  }
+
+  function setWithdrawnDate(course, studentId, dateStr) {
+    const stu = (course.students || []).find((s) => s.id === studentId);
+    if (!stu) return false;
+    if (!dateStr) {
+      delete stu.withdrawnDate;
+      return true;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      throw new Error("転退学日の形式が正しくありません。");
+    }
+    stu.withdrawnDate = dateStr;
+    return true;
+  }
+
   return {
     MAX_COURSES,
+    ROWS,
+    COLS,
     sortStudents,
     labelStudent,
+    isWithdrawnOn,
     parseWorkbook,
     findCourse,
     findCourseByName,
     createCourse,
     createEmptySeats,
     upsertCourse,
+    renameCourse,
+    setWithdrawnDate,
   };
 })();

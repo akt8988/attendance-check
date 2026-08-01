@@ -1,8 +1,8 @@
-/* Seat assignment: 6 x 8 grid, teacher desk at bottom (teacher view). */
+/* Seat assignment: COLSxROWS grid, teacher desk at bottom (teacher view). */
 
 const Seating = (() => {
-  const COLS = 6;
-  const ROWS = 8;
+  const COLS = Roster.COLS;
+  const ROWS = Roster.ROWS;
 
   function cloneSeats(seats) {
     const src = seats && seats.length ? seats : Roster.createEmptySeats();
@@ -48,9 +48,10 @@ const Seating = (() => {
     return null;
   }
 
-  function studentBySerial(course, serial) {
+  /** Resolve student by 1-based serial. Pass sortedStudents to avoid re-sorting. */
+  function studentBySerial(course, serial, sortedStudents) {
     if (!serial) return null;
-    const sorted = Roster.sortStudents(course.students);
+    const sorted = sortedStudents || Roster.sortStudents(course.students);
     return sorted[serial - 1] || null;
   }
 

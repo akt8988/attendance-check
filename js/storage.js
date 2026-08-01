@@ -9,7 +9,6 @@ const Storage = (() => {
   let dirHandle = null;
   let data = emptyData();
   let serverAvailable = false;
-  let memoryOnly = false;
 
   function emptyData() {
     return { version: 1, courses: [] };
@@ -22,18 +21,6 @@ const Storage = (() => {
 
   function getData() {
     return data;
-  }
-
-  function setData(next) {
-    data = next;
-  }
-
-  function useMemoryOnly(on) {
-    memoryOnly = !!on;
-  }
-
-  function isMemoryOnly() {
-    return memoryOnly && !dirHandle && !serverAvailable;
   }
 
   function supported() {
@@ -156,7 +143,6 @@ const Storage = (() => {
     }
     const handle = await window.showDirectoryPicker({ mode: "readwrite" });
     dirHandle = handle;
-    memoryOnly = false;
     await idbSet("dir", handle);
     data = await readJsonFromDir(handle);
     if (!data.courses.length) {
@@ -193,7 +179,6 @@ const Storage = (() => {
    * On GitHub Pages, folder is required before durable saves.
    */
   async function init() {
-    memoryOnly = false;
     let folderRestored = null;
     try {
       folderRestored = await restoreFolder();
@@ -246,38 +231,42 @@ const Storage = (() => {
   }
 
   async function save() {
+    let folderWritten = false;
+
     if (dirHandle) {
       const ok = await ensurePermission(dirHandle, "readwrite");
       if (!ok) {
         throw new Error("フォルダへの書き込み許可がありません。再度「データフォルダ」を選択してください。");
       }
       await writeJsonToDir(dirHandle, data);
+      folderWritten = true;
     }
 
-    if (serverAvailable || (await probeServer()) !== null) {
-      await writeServer(data);
-    } else if (!dirHandle) {
-      throw new Error(folderRequiredMessage());
+    if (serverAvailable) {
+      try {
+        await writeServer(data);
+      } catch (err) {
+        // Folder already durable — treat server sync failure as non-fatal
+        if (!folderWritten) throw err;
+        serverAvailable = false;
+      }
+    } else if (!folderWritten) {
+      // Dev server may have started after boot; probe once only when needed
+      const probed = await probeServer();
+      if (probed !== null) {
+        await writeServer(data);
+      } else {
+        throw new Error(folderRequiredMessage());
+      }
     }
 
     await writeIdbBackup(data);
-    memoryOnly = false;
   }
 
   async function ensureReady() {
     if (dirHandle || serverAvailable) return true;
     const probed = await probeServer();
     return probed !== null;
-  }
-
-  async function loadDemo() {
-    const res = await fetch("./data/attendance-data.json", { cache: "no-store" });
-    if (!res.ok) throw new Error("デモデータの読み込みに失敗しました。");
-    const demo = normalize(await res.json());
-    data = demo;
-    if (!dirHandle && !serverAvailable) memoryOnly = true;
-    else await save();
-    return data;
   }
 
   function hasFolder() {
@@ -310,9 +299,6 @@ const Storage = (() => {
     DATA_FILE,
     emptyData,
     getData,
-    setData,
-    useMemoryOnly,
-    isMemoryOnly,
     supported,
     needsFolder,
     pickFolder,
@@ -320,7 +306,6 @@ const Storage = (() => {
     init,
     save,
     ensureReady,
-    loadDemo,
     hasFolder,
     hasServer,
     folderName,

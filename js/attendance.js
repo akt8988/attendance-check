@@ -36,8 +36,14 @@ const Attendance = (() => {
   }
 
   function buildStatusesFromMarks(course, marks) {
+    const date = todayStr();
     const statuses = {};
     for (const stu of course.students) {
+      if (Roster.isWithdrawnOn(stu, date)) {
+        // Withdrawn on/after today: not counted; store as present for schema consistency
+        statuses[stu.id] = "present";
+        continue;
+      }
       const mark = marks[stu.id];
       if (mark === "absent") statuses[stu.id] = "absent";
       else if (mark === "late") statuses[stu.id] = "late";
@@ -69,7 +75,10 @@ const Attendance = (() => {
 
   function totalsForStudent(course, studentId) {
     const t = { absent: 0, late: 0, suspended: 0, official: 0 };
+    const stu = (course.students || []).find((s) => s.id === studentId);
     for (const sess of course.sessions || []) {
+      // Sessions on/after withdrawal date are excluded from counts
+      if (stu && Roster.isWithdrawnOn(stu, sess.date)) continue;
       const st = sess.statuses?.[studentId];
       if (st === "absent") t.absent++;
       else if (st === "late") t.late++;
@@ -89,6 +98,8 @@ const Attendance = (() => {
     const sess = (course.sessions || []).find((s) => s.id === sessionId);
     if (!sess) return false;
     if (!STATUS[status]) return false;
+    const stu = (course.students || []).find((s) => s.id === studentId);
+    if (stu && Roster.isWithdrawnOn(stu, sess.date)) return false;
     sess.statuses[studentId] = status;
     return true;
   }

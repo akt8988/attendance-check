@@ -16,12 +16,22 @@ html, body {
   font-family: Verdana, Geneva, Helvetica, Arial, sans-serif;
   font-size: 12px;
   line-height: 1.35;
+  /* Prevent blinking caret / text selection on non-editable UI */
+  user-select: none;
+  -webkit-user-select: none;
+  caret-color: transparent;
 }
 
 button, input, select {
   font: inherit;
   color: inherit;
   background: #fff;
+}
+
+input, textarea, select {
+  user-select: text;
+  -webkit-user-select: text;
+  caret-color: auto;
 }
 
 #app {
@@ -110,12 +120,12 @@ button, input, select {
 
 #navi1 a:hover,
 #navi2 a:hover {
-  background: #ccff00;
+  background: #DAF71E;
 }
 
 #navi1 a.active,
 #navi2 a.active {
-  background: #ccff00;
+  background: #DAF71E;
 }
 
 #contents {
@@ -139,6 +149,8 @@ button, input, select {
   gap: 12px;
   margin-bottom: 8px;
   flex-shrink: 0;
+  /* Same height as .box-btn so titles align on pages with/without action buttons */
+  min-height: calc(1.4em + 6px + 2px);
 }
 
 .panel-head h2 {
@@ -216,7 +228,7 @@ table.general tr:first-child th {
   border-top: none;
 }
 
-/* roster / confirm list */
+/* Identity cols (年・組・番) — same rhythm as edit-matrix sticky cols */
 .student-list {
   flex: 1;
   min-height: 0;
@@ -225,11 +237,20 @@ table.general tr:first-child th {
 
 .student-row {
   display: grid;
-  grid-template-columns: 36px 1fr auto;
-  gap: 8px;
+  /* No. / 年 / 組 / 番 / 氏名 — match edit: 2.2 / 2.2 / 2.5 */
+  grid-template-columns: 2.5em 2.2em 2.2em 2.5em 1fr;
+  column-gap: 0.75em;
   padding: 2px 0;
   border-top: 1px solid #ccc;
   align-items: center;
+}
+
+.student-row > :nth-child(1),
+.student-row > :nth-child(2),
+.student-row > :nth-child(3),
+.student-row > :nth-child(4) {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .student-row.header {
@@ -248,13 +269,34 @@ table.general tr:first-child th {
 
 table.confirm-table,
 table.compact-table {
-  width: calc(22em + 3ch);
+  width: auto;
   max-width: 100%;
   table-layout: fixed;
 }
 
+table.confirm-table .col-year,
+table.confirm-table .col-class,
+table.confirm-table .col-num,
+table.compact-table th:nth-child(1),
+table.compact-table td:nth-child(1),
+table.compact-table th:nth-child(2),
+table.compact-table td:nth-child(2),
+table.compact-table th:nth-child(3),
+table.compact-table td:nth-child(3) {
+  width: 2.2em;
+  padding-right: 0.75em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+table.confirm-table .col-num,
+table.compact-table th:nth-child(3),
+table.compact-table td:nth-child(3) {
+  width: 2.5em;
+}
+
 table.confirm-table .col-name {
-  width: 14em;
+  width: 7em;
   text-align: left;
   padding-right: 2em;
 }
@@ -270,29 +312,45 @@ table.confirm-table th.col-count {
   text-align: center;
 }
 
-table.compact-table th,
-table.compact-table td {
-  padding-right: 1.2em;
-}
-
-table.compact-table th:nth-child(1),
-table.compact-table td:nth-child(1),
-table.compact-table th:nth-child(2),
-table.compact-table td:nth-child(2),
-table.compact-table th:nth-child(3),
-table.compact-table td:nth-child(3) {
-  width: 2.5em;
-}
-
-table.compact-table th:nth-child(3),
-table.compact-table td:nth-child(3) {
-  text-align: right;
-}
-
 table.compact-table th:nth-child(4),
 table.compact-table td:nth-child(4) {
   width: auto;
-  padding-right: calc(1.5em + 3ch);
+  padding-right: 1.5em;
+}
+
+table.compact-table .col-withdrawn {
+  width: 4.5em;
+  text-align: center;
+  color: #666;
+}
+
+table.compact-table .col-action {
+  width: auto;
+  padding-left: 0.5em;
+}
+
+/* Withdrawn / transfer students — gray identity text */
+.withdrawn,
+.withdrawn td,
+.withdrawn .seat-meta,
+.withdrawn .seat-name {
+  color: #999;
+}
+
+.seat-cell.withdrawn {
+  color: #999;
+  cursor: default;
+  background: #fff;
+}
+
+.seat-cell.withdrawn .seat-meta,
+.seat-cell.withdrawn .seat-name {
+  color: #999;
+}
+
+table.edit-matrix td.locked-cell {
+  color: #bbb;
+  font-size: 11px;
 }
 
 /* seating setup layout */
@@ -300,7 +358,7 @@ table.compact-table td:nth-child(4) {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(180px, 240px) 1fr;
+  grid-template-columns: minmax(220px, 280px) 1fr;
   gap: 16px;
 }
 
@@ -348,7 +406,7 @@ table.compact-table td:nth-child(4) {
 }
 
 .seat-cell.absent {
-  background: #ccff00;
+  background: #DAF71E;
 }
 
 .seat-cell.late {
@@ -375,40 +433,86 @@ table.compact-table td:nth-child(4) {
   margin-bottom: 2px;
 }
 
-/* attendance input seats — gaps between seats; height = 3/4 of prior ratio */
-.input-seat-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 10px 12px;
-  width: min(920px, 100%);
-  flex: 0 1 auto;
+/* attendance input seats — keep gaps; scale rows into remaining height */
+.input-stage {
+  flex: 1;
   min-height: 0;
-  max-height: calc(100% - 36px);
-  margin: 0 auto;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  overflow: hidden;
+  padding-top: 4px;
+  /* Width basis for seat max-height (100% inside max-height = height, not width) */
+  container-type: inline-size;
+  container-name: input-stage;
+}
+
+.input-seat-grid {
+  --rows: 1;
+  --gap-y: 10px;
+  --gap-x: 12px;
+  --cols: 6;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows), minmax(0, 1fr));
+  gap: var(--gap-y) var(--gap-x);
+  width: min(920px, 100%);
+  /* Take space above the desk; clamp to preferred ~1.8:1 cell ratio */
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: calc(
+    var(--rows) * ((min(920px, 100cqi) - (var(--cols) - 1) * var(--gap-x)) / var(--cols) / 1.8)
+    + (var(--rows) - 1) * var(--gap-y)
+  );
+  align-content: stretch;
+  justify-content: stretch;
 }
 
 .input-seat-grid .seat-cell {
+  min-width: 0;
   min-height: 0;
   width: 100%;
-  /* previous ~1.35:1 → 3/4 height ⇒ ~1.8:1 */
-  aspect-ratio: 1.8 / 1;
-  height: auto;
+  height: 100%;
+  aspect-ratio: auto;
   font-size: 10px;
-  line-height: 1.15;
+  line-height: 1;
+  padding: 0;
+  position: relative;
+  /* Centering handled by absolutely positioned .seat-label */
+  display: block;
+}
+
+.input-seat-grid .seat-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 2px 3px;
+  overflow: hidden;
+  pointer-events: none;
+  box-sizing: border-box;
 }
 
 .seat-meta {
   font-size: 9px;
   color: #444;
   line-height: 1.1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .seat-name {
   font-size: 11px;
   font-weight: bold;
   line-height: 1.1;
-  margin-top: 1px;
+  margin-top: 0;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -422,24 +526,12 @@ table.compact-table td:nth-child(4) {
   background: transparent;
 }
 
-.input-stage {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  overflow: hidden;
-  padding-top: 4px;
-}
-
 .input-stage .teacher-desk {
   flex-shrink: 0;
   /* ~2 seat widths of the 6-column grid (gap 12px) */
   width: calc((min(920px, 100%) - 60px) / 6 * 2 + 12px);
   max-width: calc((min(920px, 100%) - 60px) / 6 * 2 + 12px);
-  align-self: center;
+  margin-top: 0;
 }
 
 /* edit matrix — scroll only inside this panel; stick latest date into view via JS */
@@ -457,10 +549,17 @@ table.edit-matrix {
 
 table.edit-matrix th,
 table.edit-matrix td {
-  border: 1px solid #ccc;
+  border: none;
+  border-top: 1px solid #ccc;
   padding: 2px 4px;
   text-align: center;
   white-space: nowrap;
+}
+
+/* Date / status cells keep a light grid; identity cols stay without vertical rules */
+table.edit-matrix th:not(.sticky-col),
+table.edit-matrix td:not(.sticky-col) {
+  border: 1px solid #ccc;
 }
 
 table.edit-matrix thead th {
@@ -470,19 +569,57 @@ table.edit-matrix thead th {
   background: #fafafa;
 }
 
+/* 年・組・番・氏名 — separate sticky cols, no vertical rules */
 table.edit-matrix th.sticky-col,
 table.edit-matrix td.sticky-col {
   position: sticky;
-  left: 0;
   background: #fff;
   text-align: left;
   z-index: 1;
-  min-width: 120px;
+  padding-left: 0;
+  padding-right: 0.75em;
 }
 
 table.edit-matrix thead th.sticky-col {
   z-index: 3;
   background: #fafafa;
+  border-top: none;
+  border-bottom: 1px solid #ccc;
+}
+
+table.edit-matrix th.sticky-year,
+table.edit-matrix td.sticky-year,
+table.edit-matrix th.sticky-class,
+table.edit-matrix td.sticky-class,
+table.edit-matrix th.sticky-num,
+table.edit-matrix td.sticky-num {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+table.edit-matrix .sticky-year {
+  left: 0;
+  width: 2.2em;
+  min-width: 2.2em;
+}
+
+table.edit-matrix .sticky-class {
+  left: 2.2em;
+  width: 2.2em;
+  min-width: 2.2em;
+}
+
+table.edit-matrix .sticky-num {
+  left: 4.4em;
+  width: 2.5em;
+  min-width: 2.5em;
+}
+
+table.edit-matrix .sticky-name {
+  left: 6.9em;
+  min-width: 5.5em;
+  padding-right: 1em;
+  box-shadow: 4px 0 6px -4px rgba(0, 0, 0, 0.12);
 }
 
 table.edit-matrix th {
@@ -499,7 +636,7 @@ table.edit-matrix select {
 }
 
 table.edit-matrix select.status-absent {
-  background: #ccff00;
+  background: #DAF71E;
 }
 
 table.edit-matrix select.status-late {

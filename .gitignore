@@ -12,5 +12,8 @@ server.exe
 server.ps1
 tools/
 
+# Local attendance data (may contain student PII)
+data/attendance-data.json
+
 # Optional local notes
 HANDOFF-distribution.md
