@@ -1,0 +1,619 @@
+/* 出欠管理 — alva noto inspired, light only */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  text-decoration: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #fff;
+  color: #000;
+  font-family: Verdana, Geneva, Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+button, input, select {
+  font: inherit;
+  color: inherit;
+  background: #fff;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  padding: 28px 28px 16px 40px;
+  display: flex;
+  flex-direction: column;
+}
+
+#header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 28px;
+  flex-shrink: 0;
+}
+
+#logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 160px;
+  height: 28px;
+  background: #000;
+  color: #fff;
+  font-size: 13px;
+  font-weight: bold;
+  letter-spacing: 0.08em;
+}
+
+#folder-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+}
+
+#folder-status {
+  color: #666;
+}
+
+#folder-status.folder-needed {
+  color: #a40;
+  font-weight: bold;
+}
+
+#btn-folder.folder-needed {
+  border-color: #a40;
+  color: #a40;
+}
+
+#body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+}
+
+#navigation {
+  display: flex;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+#navi1, #navi2 {
+  display: flex;
+  flex-direction: column;
+}
+
+#navi1 a,
+#navi2 a {
+  display: block;
+  padding: 2px 4px;
+  color: #000;
+  width: 110px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  text-align: left;
+}
+
+#navi2 a {
+  width: 140px;
+}
+
+#navi1 a:hover,
+#navi2 a:hover {
+  background: #ccff00;
+}
+
+#navi1 a.active,
+#navi2 a.active {
+  background: #ccff00;
+}
+
+#contents {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+
+.panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.panel-head h2 {
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.panel-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.box-btn {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid #000;
+  background: #fff;
+  color: #000;
+  cursor: pointer;
+  border-radius: 0;
+  line-height: 1.4;
+}
+
+.box-btn:hover {
+  background: #f5f5f5;
+}
+
+.box-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.hint {
+  color: #666;
+  font-size: 11px;
+}
+
+/* tables */
+.table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+table.general {
+  width: 100%;
+  border-collapse: collapse;
+  border-bottom: 1px solid #ccc;
+}
+
+table.general.confirm-table,
+table.general.compact-table {
+  width: auto;
+}
+
+table.general th {
+  color: #999;
+  font-style: italic;
+  font-weight: normal;
+  text-align: left;
+  padding: 2px 8px 2px 0;
+  border-top: 1px solid #ccc;
+  white-space: nowrap;
+}
+
+table.general td {
+  padding: 2px 8px 2px 0;
+  border-top: 1px solid #ccc;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+table.general tr:first-child th {
+  border-top: none;
+}
+
+/* roster / confirm list */
+.student-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.student-row {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  gap: 8px;
+  padding: 2px 0;
+  border-top: 1px solid #ccc;
+  align-items: center;
+}
+
+.student-row.header {
+  border-top: none;
+  color: #999;
+  font-style: italic;
+}
+
+/* confirm / roster: compact fixed tables (not full-bleed) */
+.confirm-wrap,
+.roster-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+table.confirm-table,
+table.compact-table {
+  width: calc(22em + 3ch);
+  max-width: 100%;
+  table-layout: fixed;
+}
+
+table.confirm-table .col-name {
+  width: 14em;
+  text-align: left;
+  padding-right: 2em;
+}
+
+table.confirm-table .col-count {
+  width: 3em;
+  text-align: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+table.confirm-table th.col-count {
+  text-align: center;
+}
+
+table.compact-table th,
+table.compact-table td {
+  padding-right: 1.2em;
+}
+
+table.compact-table th:nth-child(1),
+table.compact-table td:nth-child(1),
+table.compact-table th:nth-child(2),
+table.compact-table td:nth-child(2),
+table.compact-table th:nth-child(3),
+table.compact-table td:nth-child(3) {
+  width: 2.5em;
+}
+
+table.compact-table th:nth-child(3),
+table.compact-table td:nth-child(3) {
+  text-align: right;
+}
+
+table.compact-table th:nth-child(4),
+table.compact-table td:nth-child(4) {
+  width: auto;
+  padding-right: calc(1.5em + 3ch);
+}
+
+/* seating setup layout */
+.seating-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) 1fr;
+  gap: 16px;
+}
+
+.seat-grid-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-height: 0;
+}
+
+.seat-grid {
+  display: grid;
+  gap: 4px;
+}
+
+.seat-grid.setup {
+  grid-template-columns: repeat(6, 28px);
+}
+
+.seat-cell {
+  border: 1px solid #000;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 0;
+  padding: 1px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.seat-grid.setup .seat-cell {
+  width: 28px;
+  height: 28px;
+  font-size: 11px;
+}
+
+.seat-cell.filled {
+  background: #f0f0f0;
+}
+
+.seat-cell.absent {
+  background: #ccff00;
+}
+
+.seat-cell.late {
+  background: #ff4747;
+  color: #000;
+}
+
+.teacher-desk {
+  border: 1px solid #000;
+  width: 100%;
+  max-width: 188px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  margin-top: 4px;
+  background: #fff;
+}
+
+.perspective-label {
+  font-size: 10px;
+  color: #666;
+  margin-bottom: 2px;
+}
+
+/* attendance input seats — gaps between seats; height = 3/4 of prior ratio */
+.input-seat-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px 12px;
+  width: min(920px, 100%);
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: calc(100% - 36px);
+  margin: 0 auto;
+  align-content: start;
+}
+
+.input-seat-grid .seat-cell {
+  min-height: 0;
+  width: 100%;
+  /* previous ~1.35:1 → 3/4 height ⇒ ~1.8:1 */
+  aspect-ratio: 1.8 / 1;
+  height: auto;
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+.seat-meta {
+  font-size: 9px;
+  color: #444;
+  line-height: 1.1;
+}
+
+.seat-name {
+  font-size: 11px;
+  font-weight: bold;
+  line-height: 1.1;
+  margin-top: 1px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seat-cell.empty-slot {
+  border-style: dashed;
+  border-color: #ccc;
+  cursor: default;
+  background: transparent;
+}
+
+.input-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  overflow: hidden;
+  padding-top: 4px;
+}
+
+.input-stage .teacher-desk {
+  flex-shrink: 0;
+  /* ~2 seat widths of the 6-column grid (gap 12px) */
+  width: calc((min(920px, 100%) - 60px) / 6 * 2 + 12px);
+  max-width: calc((min(920px, 100%) - 60px) / 6 * 2 + 12px);
+  align-self: center;
+}
+
+/* edit matrix — scroll only inside this panel; stick latest date into view via JS */
+.edit-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-top: 1px solid #eee;
+}
+
+table.edit-matrix {
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+table.edit-matrix th,
+table.edit-matrix td {
+  border: 1px solid #ccc;
+  padding: 2px 4px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+table.edit-matrix thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #fafafa;
+}
+
+table.edit-matrix th.sticky-col,
+table.edit-matrix td.sticky-col {
+  position: sticky;
+  left: 0;
+  background: #fff;
+  text-align: left;
+  z-index: 1;
+  min-width: 120px;
+}
+
+table.edit-matrix thead th.sticky-col {
+  z-index: 3;
+  background: #fafafa;
+}
+
+table.edit-matrix th {
+  background: #fafafa;
+  font-weight: normal;
+  color: #666;
+}
+
+table.edit-matrix select {
+  border: 1px solid #000;
+  border-radius: 0;
+  padding: 1px 2px;
+  min-width: 64px;
+}
+
+table.edit-matrix select.status-absent {
+  background: #ccff00;
+}
+
+table.edit-matrix select.status-late {
+  background: #ff4747;
+}
+
+table.edit-matrix select.status-suspended,
+table.edit-matrix select.status-official {
+  background: #eee;
+}
+
+/* modal */
+#modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+#modal.hidden {
+  display: none;
+}
+
+#modal-panel {
+  background: #fff;
+  border: 1px solid #000;
+  padding: 20px 24px;
+  max-width: 420px;
+  width: calc(100% - 48px);
+}
+
+#modal-message {
+  margin-bottom: 12px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+#modal-input-wrap {
+  margin-bottom: 12px;
+}
+
+#modal-input-wrap.hidden {
+  display: none;
+}
+
+#modal-input {
+  width: 100%;
+  border: 1px solid #000;
+  border-radius: 0;
+  padding: 4px 6px;
+}
+
+#modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.empty-state {
+  color: #666;
+  padding-top: 4px;
+}
+
+/* Surface Pro–class viewports */
+@media (max-height: 1000px) {
+  #app {
+    padding: 16px 18px 10px 24px;
+  }
+
+  #header {
+    margin-bottom: 14px;
+  }
+
+  #logo {
+    width: 140px;
+    height: 26px;
+    font-size: 12px;
+  }
+
+  .input-seat-grid .seat-cell {
+    font-size: 9px;
+  }
+
+  .seat-meta {
+    font-size: 8px;
+  }
+
+  .seat-name {
+    font-size: 10px;
+  }
+
+  .seat-grid.setup {
+    grid-template-columns: repeat(6, 26px);
+  }
+
+  .seat-grid.setup .seat-cell {
+    width: 26px;
+    height: 26px;
+  }
+}
+
+@media (max-height: 800px) {
+  #app {
+    padding: 12px 14px 8px 18px;
+  }
+
+  #header {
+    margin-bottom: 10px;
+  }
+
+  .seat-name {
+    font-size: 9px;
+  }
+}

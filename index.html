@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light only" />
+  <title>出欠管理</title>
+  <link rel="stylesheet" href="./css/app.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="header">
+      <div id="logo">出欠管理</div>
+      <div id="folder-bar">
+        <button type="button" id="btn-folder" class="box-btn">データフォルダ</button>
+        <span id="folder-status">読み込み中…</span>
+      </div>
+    </header>
+
+    <div id="body">
+      <nav id="navigation">
+        <div id="navi1"></div>
+        <div id="navi2"></div>
+      </nav>
+      <main id="contents"></main>
+    </div>
+  </div>
+
+  <div id="modal" class="hidden" role="dialog" aria-modal="true">
+    <div id="modal-panel">
+      <p id="modal-message"></p>
+      <div id="modal-input-wrap" class="hidden">
+        <input type="text" id="modal-input" maxlength="40" />
+      </div>
+      <div id="modal-actions"></div>
+    </div>
+  </div>
+
+  <script src="./vendor/xlsx.full.min.js"></script>
+  <script src="./js/storage.js"></script>
+  <script src="./js/roster.js"></script>
+  <script src="./js/seating.js"></script>
+  <script src="./js/attendance.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>

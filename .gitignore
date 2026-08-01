@@ -1,0 +1,16 @@
+.DS_Store
+Thumbs.db
+*.log
+
+# Local / build artifacts — not for GitHub Pages
+__pycache__/
+*.pyc
+server.exe
+*.zip
+*.vbs
+*.bat
+server.ps1
+tools/
+
+# Optional local notes
+HANDOFF-distribution.md

@@ -1,0 +1,332 @@
+/* Persistence: data folder (primary on Pages) + local server API (dev) + IndexedDB backup. */
+
+const Storage = (() => {
+  const DATA_FILE = "attendance-data.json";
+  const API_PATH = "/api/data";
+  const DB_NAME = "attendance-local";
+  const STORE = "handles";
+
+  let dirHandle = null;
+  let data = emptyData();
+  let serverAvailable = false;
+  let memoryOnly = false;
+
+  function emptyData() {
+    return { version: 1, courses: [] };
+  }
+
+  function normalize(parsed) {
+    if (!parsed || !Array.isArray(parsed.courses)) return emptyData();
+    return parsed;
+  }
+
+  function getData() {
+    return data;
+  }
+
+  function setData(next) {
+    data = next;
+  }
+
+  function useMemoryOnly(on) {
+    memoryOnly = !!on;
+  }
+
+  function isMemoryOnly() {
+    return memoryOnly && !dirHandle && !serverAvailable;
+  }
+
+  function supported() {
+    return typeof window.showDirectoryPicker === "function";
+  }
+
+  /** True when neither folder nor local server is available (typical GitHub Pages). */
+  function needsFolder() {
+    return !dirHandle && !serverAvailable;
+  }
+
+  function openDb() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE)) {
+          db.createObjectStore(STORE);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function idbGet(key) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readonly");
+      const req = tx.objectStore(STORE).get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function idbSet(key, value) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function ensurePermission(handle, mode = "readwrite") {
+    if (!handle) return false;
+    const opts = { mode };
+    if ((await handle.queryPermission(opts)) === "granted") return true;
+    if ((await handle.requestPermission(opts)) === "granted") return true;
+    return false;
+  }
+
+  async function readJsonFromDir(handle) {
+    try {
+      const fileHandle = await handle.getFileHandle(DATA_FILE);
+      const file = await fileHandle.getFile();
+      const text = await file.text();
+      if (!text.trim()) return emptyData();
+      return normalize(JSON.parse(text));
+    } catch (err) {
+      if (err && err.name === "NotFoundError") return emptyData();
+      throw err;
+    }
+  }
+
+  async function writeJsonToDir(handle, payload) {
+    const fileHandle = await handle.getFileHandle(DATA_FILE, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(payload, null, 2));
+    await writable.close();
+  }
+
+  async function probeServer() {
+    try {
+      const res = await fetch(API_PATH, { method: "GET", cache: "no-store" });
+      if (!res.ok) return null;
+      const parsed = normalize(await res.json());
+      serverAvailable = true;
+      return parsed;
+    } catch (_) {
+      serverAvailable = false;
+      return null;
+    }
+  }
+
+  async function writeServer(payload) {
+    const res = await fetch(API_PATH, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify(payload, null, 2),
+    });
+    if (!res.ok) {
+      throw new Error(
+        "サーバーへの保存に失敗しました。開発用サーバーが起動しているか確認してください。"
+      );
+    }
+    serverAvailable = true;
+  }
+
+  async function writeIdbBackup(payload) {
+    try {
+      await idbSet("payload", payload);
+    } catch (_) {
+      /* non-fatal */
+    }
+  }
+
+  function folderUnsupportedMessage() {
+    return "このブラウザはフォルダ保存に対応していません。Chrome または Edge で、https:// のページ（またはローカル開発時の http://127.0.0.1）から開いてください。";
+  }
+
+  function folderRequiredMessage() {
+    return "保存先がありません。右上の「データフォルダ」を選び、名簿・出欠を保存するフォルダを指定してください。データはこの端末のフォルダにだけ保存され、ネットには送りません。";
+  }
+
+  async function pickFolder() {
+    if (!supported()) {
+      throw new Error(folderUnsupportedMessage());
+    }
+    const handle = await window.showDirectoryPicker({ mode: "readwrite" });
+    dirHandle = handle;
+    memoryOnly = false;
+    await idbSet("dir", handle);
+    data = await readJsonFromDir(handle);
+    if (!data.courses.length) {
+      await writeJsonToDir(handle, data);
+    }
+    await writeIdbBackup(data);
+    if (serverAvailable) {
+      try {
+        await writeServer(data);
+      } catch (_) {
+        /* optional sync */
+      }
+    }
+    return { name: handle.name, data };
+  }
+
+  async function restoreFolder() {
+    if (!supported()) return null;
+    const handle = await idbGet("dir");
+    if (!handle) return null;
+    const ok = await ensurePermission(handle, "readwrite");
+    if (!ok) return null;
+    dirHandle = handle;
+    data = await readJsonFromDir(handle);
+    return { name: handle.name, data };
+  }
+
+  function hasCourses(payload) {
+    return payload && Array.isArray(payload.courses) && payload.courses.length > 0;
+  }
+
+  /**
+   * Boot: restore from folder (if permitted), else server (dev), else IndexedDB preview.
+   * On GitHub Pages, folder is required before durable saves.
+   */
+  async function init() {
+    memoryOnly = false;
+    let folderRestored = null;
+    try {
+      folderRestored = await restoreFolder();
+    } catch (_) {
+      folderRestored = null;
+    }
+
+    const serverData = await probeServer();
+    let idbData = null;
+    try {
+      idbData = normalize(await idbGet("payload"));
+    } catch (_) {
+      idbData = null;
+    }
+
+    if (folderRestored && hasCourses(folderRestored.data)) {
+      data = folderRestored.data;
+    } else if (serverData && hasCourses(serverData)) {
+      data = serverData;
+    } else if (folderRestored) {
+      data = folderRestored.data;
+    } else if (serverData) {
+      data = serverData;
+    } else if (idbData && hasCourses(idbData)) {
+      // Preview only until a data folder is chosen (Pages) or server is up (dev)
+      data = idbData;
+    } else if (idbData) {
+      data = idbData;
+    } else {
+      data = emptyData();
+    }
+
+    await writeIdbBackup(data);
+
+    if (serverAvailable && hasCourses(data)) {
+      try {
+        const current = await probeServer();
+        if (!hasCourses(current)) await writeServer(data);
+      } catch (_) {
+        /* ignore */
+      }
+    }
+
+    return {
+      data,
+      serverAvailable,
+      hasFolder: !!dirHandle,
+      needsFolder: needsFolder(),
+    };
+  }
+
+  async function save() {
+    if (dirHandle) {
+      const ok = await ensurePermission(dirHandle, "readwrite");
+      if (!ok) {
+        throw new Error("フォルダへの書き込み許可がありません。再度「データフォルダ」を選択してください。");
+      }
+      await writeJsonToDir(dirHandle, data);
+    }
+
+    if (serverAvailable || (await probeServer()) !== null) {
+      await writeServer(data);
+    } else if (!dirHandle) {
+      throw new Error(folderRequiredMessage());
+    }
+
+    await writeIdbBackup(data);
+    memoryOnly = false;
+  }
+
+  async function ensureReady() {
+    if (dirHandle || serverAvailable) return true;
+    const probed = await probeServer();
+    return probed !== null;
+  }
+
+  async function loadDemo() {
+    const res = await fetch("./data/attendance-data.json", { cache: "no-store" });
+    if (!res.ok) throw new Error("デモデータの読み込みに失敗しました。");
+    const demo = normalize(await res.json());
+    data = demo;
+    if (!dirHandle && !serverAvailable) memoryOnly = true;
+    else await save();
+    return data;
+  }
+
+  function hasFolder() {
+    return !!dirHandle;
+  }
+
+  function hasServer() {
+    return serverAvailable;
+  }
+
+  function folderName() {
+    return dirHandle ? dirHandle.name : "";
+  }
+
+  function statusLabel() {
+    if (dirHandle) {
+      return `保存先: ${dirHandle.name} / ${DATA_FILE}`;
+    }
+    if (serverAvailable) {
+      return `保存先: data/${DATA_FILE}（自動）`;
+    }
+    return "未選択（データフォルダを選んでください）";
+  }
+
+  function uid(prefix) {
+    return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  return {
+    DATA_FILE,
+    emptyData,
+    getData,
+    setData,
+    useMemoryOnly,
+    isMemoryOnly,
+    supported,
+    needsFolder,
+    pickFolder,
+    restoreFolder,
+    init,
+    save,
+    ensureReady,
+    loadDemo,
+    hasFolder,
+    hasServer,
+    folderName,
+    statusLabel,
+    folderRequiredMessage,
+    folderUnsupportedMessage,
+    uid,
+  };
+})();
