@@ -84,6 +84,16 @@ input, textarea, select {
   color: #a40;
 }
 
+#btn-reconnect.folder-needed {
+  border-color: #a40;
+  color: #a40;
+  font-weight: bold;
+}
+
+#btn-reconnect.hidden {
+  display: none;
+}
+
 #body {
   flex: 1;
   min-height: 0;
@@ -509,7 +519,7 @@ table.edit-matrix td.locked-cell {
 }
 
 .seat-name {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: bold;
   line-height: 1.1;
   margin-top: 0;
@@ -732,7 +742,7 @@ table.edit-matrix select.status-official {
   }
 
   .seat-name {
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .seat-grid.setup {
@@ -755,6 +765,6 @@ table.edit-matrix select.status-official {
   }
 
   .seat-name {
-    font-size: 9px;
+    font-size: 11px;
   }
 }

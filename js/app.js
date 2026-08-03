@@ -23,6 +23,7 @@
     contents: document.getElementById("contents"),
     folderStatus: document.getElementById("folder-status"),
     btnFolder: document.getElementById("btn-folder"),
+    btnReconnect: document.getElementById("btn-reconnect"),
     modal: document.getElementById("modal"),
     modalMessage: document.getElementById("modal-message"),
     modalInputWrap: document.getElementById("modal-input-wrap"),
@@ -42,6 +43,15 @@
     return Roster.findCourse(data(), state.courseId);
   }
 
+  function needsReconnect() {
+    return (
+      typeof Storage.needsFolder === "function" &&
+      Storage.needsFolder() &&
+      typeof Storage.hasRememberedFolder === "function" &&
+      Storage.hasRememberedFolder()
+    );
+  }
+
   function updateFolderStatus() {
     if (typeof Storage.statusLabel === "function") {
       el.folderStatus.textContent = Storage.statusLabel();
@@ -51,8 +61,31 @@
       el.folderStatus.textContent = "未選択（データフォルダを選んでください）";
     }
     const needs = typeof Storage.needsFolder === "function" && Storage.needsFolder();
+    const reconnect = needsReconnect();
     el.folderStatus.classList.toggle("folder-needed", needs);
-    el.btnFolder.classList.toggle("folder-needed", needs);
+    el.btnFolder.classList.toggle("folder-needed", needs && !reconnect);
+    if (el.btnReconnect) {
+      el.btnReconnect.classList.toggle("hidden", !reconnect);
+      el.btnReconnect.classList.toggle("folder-needed", reconnect);
+    }
+  }
+
+  async function afterFolderConnected() {
+    updateFolderStatus();
+    state.courseId = null;
+    state.seatingCtrl = null;
+    render();
+  }
+
+  async function tryReconnectFolder() {
+    if (!(typeof Storage.reconnectFolder === "function")) return false;
+    if (!(typeof Storage.hasRememberedFolder === "function" && Storage.hasRememberedFolder())) {
+      return false;
+    }
+    const ok = await Storage.reconnectFolder();
+    if (!ok) return false;
+    await afterFolderConnected();
+    return true;
   }
 
   async function ensureFolder() {
@@ -65,9 +98,12 @@
         return true;
       }
     }
+    // Permission often expires after closing the tab; reconnect on this click.
+    if (await tryReconnectFolder()) return true;
     try {
       await Storage.pickFolder();
-      updateFolderStatus();
+      await afterFolderConnected();
+      return true;
     } catch (err) {
       if (err && err.name === "AbortError") return false;
       await alertModal(err.message || String(err));
@@ -85,6 +121,50 @@
       );
       return;
     }
+
+    const remembered =
+      typeof Storage.hasRememberedFolder === "function" && Storage.hasRememberedFolder();
+    const name = Storage.folderName ? Storage.folderName() : "";
+
+    if (remembered && name) {
+      const r = await showModal({
+        message: `前回選んだフォルダ「${name}」への接続許可が切れています。再接続すると、同じフォルダのデータを引き続き使えます（ネットには送りません）。`,
+        buttons: [
+          { label: "後で", action: "later" },
+          { label: "別のフォルダ", action: "pick" },
+          {
+            label: "再接続",
+            action: "reconnect",
+            run: () => Storage.reconnectFolder(),
+          },
+        ],
+      });
+      if (r.action === "later") return;
+      if (r.action === "reconnect") {
+        if (r.error) {
+          await alertModal(r.error.message || String(r.error));
+          return;
+        }
+        if (!r.runResult) {
+          await alertModal(
+            "許可が得られませんでした。「別のフォルダ」で同じフォルダを選び直してください。"
+          );
+          return;
+        }
+        await afterFolderConnected();
+        return;
+      }
+      // pick
+      try {
+        await Storage.pickFolder();
+        await afterFolderConnected();
+      } catch (err) {
+        if (err && err.name === "AbortError") return;
+        await alertModal(err.message || String(err));
+      }
+      return;
+    }
+
     const r = await showModal({
       message:
         "名簿・出欠を保存する「データフォルダ」を選んでください。データはこの端末のフォルダだけに保存され、ネットには送りません。",
@@ -96,10 +176,7 @@
     if (r.action !== "pick") return;
     try {
       await Storage.pickFolder();
-      updateFolderStatus();
-      state.courseId = null;
-      state.seatingCtrl = null;
-      render();
+      await afterFolderConnected();
     } catch (err) {
       if (err && err.name === "AbortError") return;
       await alertModal(err.message || String(err));
@@ -148,10 +225,23 @@
         btn.type = "button";
         btn.className = "box-btn";
         btn.textContent = b.label;
-        btn.addEventListener("click", () => {
+        btn.addEventListener("click", async () => {
+          // Run before close so File System Access requestPermission keeps user activation.
+          let runResult;
+          if (typeof b.run === "function") {
+            btn.disabled = true;
+            try {
+              runResult = await b.run();
+            } catch (err) {
+              btn.disabled = false;
+              closeModal();
+              resolve({ action: b.action, value: null, runResult: null, error: err });
+              return;
+            }
+          }
           const value = input ? el.modalInput.value.trim() : null;
           closeModal();
-          resolve({ action: b.action, value });
+          resolve({ action: b.action, value, runResult });
         });
         el.modalActions.appendChild(btn);
       });
@@ -1035,15 +1125,27 @@
   el.btnFolder.addEventListener("click", async () => {
     try {
       await Storage.pickFolder();
-      updateFolderStatus();
-      state.courseId = null;
-      state.seatingCtrl = null;
-      render();
+      await afterFolderConnected();
     } catch (err) {
       if (err && err.name === "AbortError") return;
       await alertModal(err.message || String(err));
     }
   });
+
+  if (el.btnReconnect) {
+    el.btnReconnect.addEventListener("click", async () => {
+      try {
+        const ok = await tryReconnectFolder();
+        if (!ok) {
+          await alertModal(
+            "許可が得られませんでした。「データフォルダ」で同じフォルダを選び直してください。"
+          );
+        }
+      } catch (err) {
+        await alertModal(err.message || String(err));
+      }
+    });
+  }
 
   async function boot() {
     try {

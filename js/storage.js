@@ -7,6 +7,8 @@ const Storage = (() => {
   const STORE = "handles";
 
   let dirHandle = null;
+  /** True only when dirHandle currently has readwrite permission. */
+  let folderGranted = false;
   let data = emptyData();
   let serverAvailable = false;
 
@@ -27,9 +29,14 @@ const Storage = (() => {
     return typeof window.showDirectoryPicker === "function";
   }
 
-  /** True when neither folder nor local server is available (typical GitHub Pages). */
+  /** True when there is no writable folder and no local server (typical GitHub Pages). */
   function needsFolder() {
-    return !dirHandle && !serverAvailable;
+    return !(dirHandle && folderGranted) && !serverAvailable;
+  }
+
+  /** Handle remembered in IndexedDB, even if permission is not granted yet. */
+  function hasRememberedFolder() {
+    return !!dirHandle;
   }
 
   function openDb() {
@@ -66,11 +73,27 @@ const Storage = (() => {
     });
   }
 
+  async function queryGranted(handle, mode = "readwrite") {
+    if (!handle) return false;
+    try {
+      return (await handle.queryPermission({ mode })) === "granted";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * requestPermission requires a user gesture (click). Do not call during boot.
+   */
   async function ensurePermission(handle, mode = "readwrite") {
     if (!handle) return false;
     const opts = { mode };
     if ((await handle.queryPermission(opts)) === "granted") return true;
-    if ((await handle.requestPermission(opts)) === "granted") return true;
+    try {
+      if ((await handle.requestPermission(opts)) === "granted") return true;
+    } catch (_) {
+      /* NotAllowedError when called without user activation */
+    }
     return false;
   }
 
@@ -143,6 +166,7 @@ const Storage = (() => {
     }
     const handle = await window.showDirectoryPicker({ mode: "readwrite" });
     dirHandle = handle;
+    folderGranted = true;
     await idbSet("dir", handle);
     data = await readJsonFromDir(handle);
     if (!data.courses.length) {
@@ -159,15 +183,38 @@ const Storage = (() => {
     return { name: handle.name, data };
   }
 
+  /**
+   * Restore directory handle from IndexedDB. Permission often resets after the tab
+   * is closed; only queryPermission here (requestPermission needs a click).
+   */
   async function restoreFolder() {
     if (!supported()) return null;
     const handle = await idbGet("dir");
     if (!handle) return null;
-    const ok = await ensurePermission(handle, "readwrite");
-    if (!ok) return null;
     dirHandle = handle;
+    const granted = await queryGranted(handle, "readwrite");
+    folderGranted = granted;
+    if (!granted) {
+      return { name: handle.name, data: null, granted: false };
+    }
     data = await readJsonFromDir(handle);
-    return { name: handle.name, data };
+    return { name: handle.name, data, granted: true };
+  }
+
+  /**
+   * Re-request permission for the remembered folder. Must run from a user gesture.
+   */
+  async function reconnectFolder() {
+    if (!dirHandle) return false;
+    const ok = await ensurePermission(dirHandle, "readwrite");
+    if (!ok) {
+      folderGranted = false;
+      return false;
+    }
+    folderGranted = true;
+    data = await readJsonFromDir(dirHandle);
+    await writeIdbBackup(data);
+    return true;
   }
 
   function hasCourses(payload) {
@@ -194,16 +241,16 @@ const Storage = (() => {
       idbData = null;
     }
 
-    if (folderRestored && hasCourses(folderRestored.data)) {
+    if (folderRestored && folderRestored.granted && hasCourses(folderRestored.data)) {
       data = folderRestored.data;
     } else if (serverData && hasCourses(serverData)) {
       data = serverData;
-    } else if (folderRestored) {
+    } else if (folderRestored && folderRestored.granted) {
       data = folderRestored.data;
     } else if (serverData) {
       data = serverData;
     } else if (idbData && hasCourses(idbData)) {
-      // Preview only until a data folder is chosen (Pages) or server is up (dev)
+      // Preview only until folder permission is re-granted (Pages) or server is up (dev)
       data = idbData;
     } else if (idbData) {
       data = idbData;
@@ -225,7 +272,8 @@ const Storage = (() => {
     return {
       data,
       serverAvailable,
-      hasFolder: !!dirHandle,
+      hasFolder: !!(dirHandle && folderGranted),
+      hasRememberedFolder: !!dirHandle,
       needsFolder: needsFolder(),
     };
   }
@@ -236,8 +284,10 @@ const Storage = (() => {
     if (dirHandle) {
       const ok = await ensurePermission(dirHandle, "readwrite");
       if (!ok) {
-        throw new Error("フォルダへの書き込み許可がありません。再度「データフォルダ」を選択してください。");
+        folderGranted = false;
+        throw new Error("フォルダへの書き込み許可がありません。再度「データフォルダ」を選択するか、再接続してください。");
       }
+      folderGranted = true;
       await writeJsonToDir(dirHandle, data);
       folderWritten = true;
     }
@@ -264,13 +314,13 @@ const Storage = (() => {
   }
 
   async function ensureReady() {
-    if (dirHandle || serverAvailable) return true;
+    if ((dirHandle && folderGranted) || serverAvailable) return true;
     const probed = await probeServer();
     return probed !== null;
   }
 
   function hasFolder() {
-    return !!dirHandle;
+    return !!(dirHandle && folderGranted);
   }
 
   function hasServer() {
@@ -282,8 +332,11 @@ const Storage = (() => {
   }
 
   function statusLabel() {
-    if (dirHandle) {
+    if (dirHandle && folderGranted) {
       return `保存先: ${dirHandle.name} / ${DATA_FILE}`;
+    }
+    if (dirHandle) {
+      return `前回のフォルダ: ${dirHandle.name}（再接続が必要）`;
     }
     if (serverAvailable) {
       return `保存先: data/${DATA_FILE}（自動）`;
@@ -303,10 +356,12 @@ const Storage = (() => {
     needsFolder,
     pickFolder,
     restoreFolder,
+    reconnectFolder,
     init,
     save,
     ensureReady,
     hasFolder,
+    hasRememberedFolder,
     hasServer,
     folderName,
     statusLabel,
