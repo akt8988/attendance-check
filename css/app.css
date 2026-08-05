@@ -424,6 +424,11 @@ table.edit-matrix td.locked-cell {
   color: #000;
 }
 
+.seat-cell.early-leave {
+  background: #ffb347;
+  color: #000;
+}
+
 .teacher-desk {
   border: 1px solid #000;
   width: 100%;
@@ -655,6 +660,10 @@ table.edit-matrix select.status-absent {
 
 table.edit-matrix select.status-late {
   background: #ff4747;
+}
+
+table.edit-matrix select.status-early-leave {
+  background: #ffb347;
 }
 
 table.edit-matrix select.status-suspended,

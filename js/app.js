@@ -12,7 +12,7 @@
   const state = {
     main: null,
     courseId: null,
-    marks: {}, // studentId -> absent|late
+    marks: {}, // studentId -> absent|late|earlyLeave
     inputDate: null, // YYYY-MM-DD for past attendance; null = today
     seatingCtrl: null,
   };
@@ -760,8 +760,8 @@
     const legend = document.createElement("span");
     legend.className = "hint";
     legend.textContent = isPast
-      ? `${Attendance.formatDateLabel(targetDate, 1)} の出欠 ／ タップ: 欠席 → 遅刻 → 出席`
-      : "タップ: 欠席 → 遅刻 → 出席";
+      ? `${Attendance.formatDateLabel(targetDate, 1)} の出欠 ／ タップ: 欠席 → 遅刻 → 早退 → 出席`
+      : "タップ: 欠席 → 遅刻 → 早退 → 出席";
     actions.appendChild(legend);
 
     if (isPast) {
@@ -834,6 +834,7 @@
               const mark = state.marks[stu.id] || null;
               if (mark === "absent") cell.classList.add("absent");
               if (mark === "late") cell.classList.add("late");
+              if (mark === "earlyLeave") cell.classList.add("early-leave");
               cell.addEventListener("click", () => {
                 state.marks[stu.id] = Attendance.cycleMark(state.marks[stu.id] || null);
                 if (!state.marks[stu.id]) delete state.marks[stu.id];
@@ -960,7 +961,8 @@
       <th class="col-name">氏名</th>
       <th class="col-count">欠席</th>
       <th class="col-count">遅刻</th>
-      <th class="col-count">出停</th>
+      <th class="col-count">早退</th>
+      <th class="col-count">停忌</th>
       <th class="col-count">公欠</th>
     </tr>`;
 
@@ -975,6 +977,7 @@
         `<td class="col-name">${escapeHtml(s.name)}</td>` +
         `<td class="col-count">${t.absent}</td>` +
         `<td class="col-count">${t.late}</td>` +
+        `<td class="col-count">${t.earlyLeave}</td>` +
         `<td class="col-count">${t.suspended}</td>` +
         `<td class="col-count">${t.official}</td>`;
       table.appendChild(tr);
@@ -1103,11 +1106,13 @@
     sel.classList.remove(
       "status-absent",
       "status-late",
+      "status-early-leave",
       "status-suspended",
       "status-official"
     );
     if (sel.value === "absent") sel.classList.add("status-absent");
     if (sel.value === "late") sel.classList.add("status-late");
+    if (sel.value === "earlyLeave") sel.classList.add("status-early-leave");
     if (sel.value === "suspended") sel.classList.add("status-suspended");
     if (sel.value === "official") sel.classList.add("status-official");
   }

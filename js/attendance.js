@@ -5,11 +5,12 @@ const Attendance = (() => {
     present: "出席",
     absent: "欠席",
     late: "遅刻",
-    suspended: "出停",
+    earlyLeave: "早退",
+    suspended: "停忌",
     official: "公欠",
   };
 
-  const INPUT_CYCLE = [null, "absent", "late"];
+  const INPUT_CYCLE = [null, "absent", "late", "earlyLeave"];
 
   function todayStr() {
     const d = new Date();
@@ -59,9 +60,11 @@ const Attendance = (() => {
         continue;
       }
       const mark = marks[stu.id];
-      if (mark === "absent") statuses[stu.id] = "absent";
-      else if (mark === "late") statuses[stu.id] = "late";
-      else statuses[stu.id] = "present";
+      if (mark === "absent" || mark === "late" || mark === "earlyLeave") {
+        statuses[stu.id] = mark;
+      } else {
+        statuses[stu.id] = "present";
+      }
     }
     return statuses;
   }
@@ -88,7 +91,7 @@ const Attendance = (() => {
   }
 
   function totalsForStudent(course, studentId) {
-    const t = { absent: 0, late: 0, suspended: 0, official: 0 };
+    const t = { absent: 0, late: 0, earlyLeave: 0, suspended: 0, official: 0 };
     const stu = (course.students || []).find((s) => s.id === studentId);
     for (const sess of course.sessions || []) {
       // Sessions on/after withdrawal date are excluded from counts
@@ -96,6 +99,7 @@ const Attendance = (() => {
       const st = sess.statuses?.[studentId];
       if (st === "absent") t.absent++;
       else if (st === "late") t.late++;
+      else if (st === "earlyLeave") t.earlyLeave++;
       else if (st === "suspended") t.suspended++;
       else if (st === "official") t.official++;
     }
