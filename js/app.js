@@ -260,8 +260,8 @@
     return showModal({
       message,
       buttons: [
-        { label: "いいえ", action: "no" },
         { label: "はい", action: "yes" },
+        { label: "いいえ", action: "no" },
       ],
     }).then((r) => r.action === "yes");
   }
@@ -1032,7 +1032,19 @@
       `<th class="sticky-col sticky-name">氏名</th>`;
     sessions.forEach((sess) => {
       const th = document.createElement("th");
-      th.textContent = Attendance.formatDateLabel(sess.date, sess.sessionIndex || 1);
+      th.className = "session-col";
+
+      const dateBtn = document.createElement("button");
+      dateBtn.type = "button";
+      dateBtn.className = "session-date-btn";
+      dateBtn.textContent = Attendance.formatDateLabel(
+        sess.date,
+        sess.sessionIndex || 1
+      );
+      dateBtn.title = "日付の変更・削除";
+      dateBtn.addEventListener("click", () => onSessionHeader(course, sess));
+
+      th.appendChild(dateBtn);
       hr.appendChild(th);
     });
     thead.appendChild(hr);
@@ -1100,6 +1112,86 @@
     requestAnimationFrame(() => {
       wrap.scrollLeft = wrap.scrollWidth;
     });
+  }
+
+  async function onSessionHeader(course, sess) {
+    if (!(await ensureFolder())) return;
+    const label = Attendance.formatDateLabel(sess.date, sess.sessionIndex || 1);
+    const r = await showModal({
+      message: `${label} の出欠の編集`,
+      input: {
+        type: "date",
+        value: sess.date,
+      },
+      buttons: [
+        { label: "日付を変更", action: "change" },
+        { label: "削除", action: "delete" },
+        { label: "キャンセル", action: "cancel" },
+      ],
+    });
+    if (r.action === "delete") {
+      await deleteSessionWithConfirm(course, sess, label);
+      return;
+    }
+    if (r.action !== "change") return;
+    if (!Attendance.isValidDateStr(r.value)) {
+      await alertModal("日付を選択してください。");
+      return;
+    }
+    if (r.value === sess.date) return;
+
+    const backup = snapshotSessions(course);
+    const result = Attendance.updateSessionDate(course, sess.id, r.value);
+    if (!result.ok) {
+      await alertModal(result.error || "日付を変更できませんでした。");
+      return;
+    }
+    try {
+      await saveData();
+      render();
+    } catch (_) {
+      restoreSessions(course, backup);
+      render();
+    }
+  }
+
+  async function deleteSessionWithConfirm(course, sess, label) {
+    const ok = await confirmModal(
+      `${label} の出欠記録を削除しますか？この操作は元に戻せません。`
+    );
+    if (!ok) return;
+
+    const backup = snapshotSessions(course);
+    const result = Attendance.deleteSession(course, sess.id);
+    if (!result.ok) {
+      await alertModal(result.error || "削除できませんでした。");
+      return;
+    }
+    try {
+      await saveData();
+      render();
+    } catch (_) {
+      restoreSessions(course, backup);
+      render();
+    }
+  }
+
+  function snapshotSessions(course) {
+    return (course.sessions || []).map((s) => ({
+      id: s.id,
+      date: s.date,
+      sessionIndex: s.sessionIndex,
+      statuses: { ...(s.statuses || {}) },
+    }));
+  }
+
+  function restoreSessions(course, backup) {
+    course.sessions = backup.map((s) => ({
+      id: s.id,
+      date: s.date,
+      sessionIndex: s.sessionIndex,
+      statuses: { ...(s.statuses || {}) },
+    }));
   }
 
   function applySelectClass(sel) {

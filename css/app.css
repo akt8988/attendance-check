@@ -647,6 +647,30 @@ table.edit-matrix th {
   color: #666;
 }
 
+table.edit-matrix th.session-col {
+  vertical-align: middle;
+}
+
+.session-date-btn {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: #666;
+  text-decoration: none;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.session-date-btn:hover,
+.session-date-btn:focus {
+  color: #222;
+  text-decoration: none;
+  outline: none;
+}
+
 table.edit-matrix select {
   border: 1px solid #000;
   border-radius: 0;

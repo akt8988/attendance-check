@@ -50,6 +50,60 @@ const Attendance = (() => {
     return Math.max(...list.map((s) => s.sessionIndex || 1)) + 1;
   }
 
+  function sortSessions(course) {
+    if (!course.sessions) return;
+    course.sessions.sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return (a.sessionIndex || 1) - (b.sessionIndex || 1);
+    });
+  }
+
+  /** Renumber sessionIndex 1..n for sessions on the same date (stable by previous index). */
+  function reindexSessionsOnDate(course, dateStr) {
+    const list = sessionsOnDate(course, dateStr).slice().sort((a, b) => {
+      return (a.sessionIndex || 1) - (b.sessionIndex || 1);
+    });
+    list.forEach((s, i) => {
+      s.sessionIndex = i + 1;
+    });
+  }
+
+  function findSession(course, sessionId) {
+    return (course.sessions || []).find((s) => s.id === sessionId) || null;
+  }
+
+  /**
+   * Change a session's date. Reassigns sessionIndex on the new date and
+   * reindexes remaining sessions on the old date.
+   */
+  function updateSessionDate(course, sessionId, newDate) {
+    if (!isValidDateStr(newDate)) return { ok: false, error: "日付が正しくありません。" };
+    const sess = findSession(course, sessionId);
+    if (!sess) return { ok: false, error: "出欠記録が見つかりません。" };
+    if (sess.date === newDate) return { ok: true, session: sess, unchanged: true };
+
+    const oldDate = sess.date;
+    const othersOnNew = sessionsOnDate(course, newDate).filter((s) => s.id !== sessionId);
+    sess.date = newDate;
+    sess.sessionIndex = othersOnNew.length
+      ? Math.max(...othersOnNew.map((s) => s.sessionIndex || 1)) + 1
+      : 1;
+    reindexSessionsOnDate(course, oldDate);
+    reindexSessionsOnDate(course, newDate);
+    sortSessions(course);
+    return { ok: true, session: sess, oldDate };
+  }
+
+  /** Remove a session and reindex remaining sessions on that date. */
+  function deleteSession(course, sessionId) {
+    if (!course.sessions) return { ok: false, error: "出欠記録が見つかりません。", session: null, index: -1 };
+    const idx = course.sessions.findIndex((s) => s.id === sessionId);
+    if (idx < 0) return { ok: false, error: "出欠記録が見つかりません。", session: null, index: -1 };
+    const [removed] = course.sessions.splice(idx, 1);
+    reindexSessionsOnDate(course, removed.date);
+    return { ok: true, session: removed, index: idx };
+  }
+
   function buildStatusesFromMarks(course, marks, dateStr) {
     const date = isValidDateStr(dateStr) ? dateStr : todayStr();
     const statuses = {};
@@ -83,10 +137,7 @@ const Attendance = (() => {
     };
     if (!course.sessions) course.sessions = [];
     course.sessions.push(session);
-    course.sessions.sort((a, b) => {
-      if (a.date !== b.date) return a.date.localeCompare(b.date);
-      return (a.sessionIndex || 1) - (b.sessionIndex || 1);
-    });
+    sortSessions(course);
     return { needConfirm: false, session };
   }
 
@@ -130,6 +181,8 @@ const Attendance = (() => {
     formatDateLabel,
     sessionsOnDate,
     recordSession,
+    updateSessionDate,
+    deleteSession,
     totalsForStudent,
     cycleMark,
     setStatus,
