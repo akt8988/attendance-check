@@ -40,6 +40,40 @@ const Attendance = (() => {
     return sessionIndex > 1 ? `${base}#${sessionIndex}` : base;
   }
 
+  /** Add days to YYYY-MM-DD (local calendar, not UTC). */
+  function addDays(dateStr, days) {
+    if (!isValidDateStr(dateStr)) return "";
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + days);
+    const mm = String(dt.getMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getDate()).padStart(2, "0");
+    return `${dt.getFullYear()}-${mm}-${dd}`;
+  }
+
+  /**
+   * Semester bucket for a session date.
+   * count 2 (二期制): ① through ends.first, then ② after that.
+   * count 3 (三期制): ① through ends.first, ② through ends.second, then ③.
+   * Until ①'s end is set, every date stays in ①.
+   * In a 3-term year, dates after ① stay in ② until ②'s end is set.
+   */
+  function termForDate(dateStr, ends) {
+    const count = ends && ends.count === 2 ? 2 : 3;
+    const first = ends && isValidDateStr(ends.first) ? ends.first : "";
+    const second =
+      count === 3 &&
+      first &&
+      ends &&
+      isValidDateStr(ends.second) &&
+      ends.second > first
+        ? ends.second
+        : "";
+    if (!first || dateStr <= first) return 1;
+    if (count === 2 || !second || dateStr <= second) return 2;
+    return 3;
+  }
+
   function sessionsOnDate(course, dateStr) {
     return (course.sessions || []).filter((s) => s.date === dateStr);
   }
@@ -141,20 +175,39 @@ const Attendance = (() => {
     return { needConfirm: false, session };
   }
 
+  function emptyTotals() {
+    return { absent: 0, late: 0, earlyLeave: 0, suspended: 0, official: 0 };
+  }
+
+  function addStatus(t, status) {
+    if (status === "absent") t.absent++;
+    else if (status === "late") t.late++;
+    else if (status === "earlyLeave") t.earlyLeave++;
+    else if (status === "suspended") t.suspended++;
+    else if (status === "official") t.official++;
+  }
+
   function totalsForStudent(course, studentId) {
-    const t = { absent: 0, late: 0, earlyLeave: 0, suspended: 0, official: 0 };
+    const t = emptyTotals();
     const stu = (course.students || []).find((s) => s.id === studentId);
     for (const sess of course.sessions || []) {
       // Sessions on/after withdrawal date are excluded from counts
       if (stu && Roster.isWithdrawnOn(stu, sess.date)) continue;
-      const st = sess.statuses?.[studentId];
-      if (st === "absent") t.absent++;
-      else if (st === "late") t.late++;
-      else if (st === "earlyLeave") t.earlyLeave++;
-      else if (st === "suspended") t.suspended++;
-      else if (st === "official") t.official++;
+      addStatus(t, sess.statuses?.[studentId]);
     }
     return t;
+  }
+
+  /** Per-semester counts. `ends` is { first, second } (YYYY-MM-DD, either may be empty). */
+  function totalsByTerm(course, studentId, ends) {
+    const by = { 1: emptyTotals(), 2: emptyTotals(), 3: emptyTotals() };
+    const stu = (course.students || []).find((s) => s.id === studentId);
+    for (const sess of course.sessions || []) {
+      if (stu && Roster.isWithdrawnOn(stu, sess.date)) continue;
+      const term = termForDate(sess.date, ends);
+      addStatus(by[term], sess.statuses?.[studentId]);
+    }
+    return by;
   }
 
   function cycleMark(current) {
@@ -179,11 +232,14 @@ const Attendance = (() => {
     yesterdayStr,
     isValidDateStr,
     formatDateLabel,
+    addDays,
+    termForDate,
     sessionsOnDate,
     recordSession,
     updateSessionDate,
     deleteSession,
     totalsForStudent,
+    totalsByTerm,
     cycleMark,
     setStatus,
   };

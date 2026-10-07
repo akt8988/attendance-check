@@ -322,6 +322,77 @@ table.confirm-table th.col-count {
   text-align: center;
 }
 
+.term-bounds {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.term-bounds-label {
+  font-weight: bold;
+}
+
+.term-system {
+  display: inline-flex;
+}
+
+.term-system button {
+  border: 1px solid #000;
+  background: #fff;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.term-system button + button {
+  margin-left: -1px;
+}
+
+.term-system button.active {
+  background: #DAF71E;
+}
+
+.term-bound {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.term-bound input[type="date"] {
+  border: 1px solid #000;
+  border-radius: 0;
+  padding: 2px 4px;
+  background: #fff;
+}
+
+.term-bounds .hint {
+  flex-basis: 100%;
+}
+
+table.confirm-table.confirm-terms {
+  width: max-content;
+  max-width: none;
+}
+
+table.confirm-table th.term-group {
+  text-align: center;
+  color: #000;
+  font-style: normal;
+  font-weight: bold;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+table.confirm-table .term-start {
+  border-left: 1px solid #ccc;
+}
+
+table.confirm-table .term-2 {
+  background: #f6f6f6;
+}
+
 table.compact-table th:nth-child(4),
 table.compact-table td:nth-child(4) {
   width: auto;

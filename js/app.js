@@ -931,6 +931,139 @@
 
   /* ---------- confirm ---------- */
 
+  const CONFIRM_TERMS = [
+    { n: 1, mark: "①" },
+    { n: 2, mark: "②" },
+    { n: 3, mark: "③" },
+  ];
+  const CONFIRM_COUNTS = [
+    ["absent", "欠席"],
+    ["late", "遅刻"],
+    ["earlyLeave", "早退"],
+    ["suspended", "停忌"],
+    ["official", "公欠"],
+  ];
+
+  function readTermEnds() {
+    const t = data().termEnds;
+    return {
+      count: t && t.count === 2 ? 2 : 3,
+      first: t && Attendance.isValidDateStr(t.first) ? t.first : "",
+      second: t && Attendance.isValidDateStr(t.second) ? t.second : "",
+    };
+  }
+
+  function writeTermEnds(ends) {
+    const stored = {};
+    if (ends.count === 2) stored.count = 2;
+    if (ends.first) stored.first = ends.first;
+    if (ends.second) stored.second = ends.second;
+    if (stored.count || stored.first || stored.second) data().termEnds = stored;
+    else delete data().termEnds;
+  }
+
+  function visibleTerms(ends) {
+    return ends.count === 2 ? CONFIRM_TERMS.slice(0, 2) : CONFIRM_TERMS;
+  }
+
+  function renderTermBounds(ends) {
+    const box = document.createElement("div");
+    box.className = "term-bounds";
+
+    const title = document.createElement("span");
+    title.className = "term-bounds-label";
+    title.textContent = "期";
+    box.appendChild(title);
+
+    const system = document.createElement("div");
+    system.className = "term-system";
+    [
+      { count: 2, label: "二期制" },
+      { count: 3, label: "三期制" },
+    ].forEach(({ count, label }) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = label;
+      if (ends.count === count) btn.classList.add("active");
+      btn.addEventListener("click", () => onTermCountChange(count));
+      system.appendChild(btn);
+    });
+    box.appendChild(system);
+
+    const fields = [{ key: "first", label: "①の末日" }];
+    if (ends.count === 3) fields.push({ key: "second", label: "②の末日" });
+    fields.forEach(({ key, label }) => {
+      const lab = document.createElement("label");
+      lab.className = "term-bound";
+      lab.appendChild(document.createTextNode(label));
+      const input = document.createElement("input");
+      input.type = "date";
+      input.value = ends[key];
+      input.addEventListener("change", () => onTermBoundChange(key, input.value));
+      lab.appendChild(input);
+      box.appendChild(lab);
+    });
+
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent =
+      ends.count === 2
+        ? "二期制は①と②だけです。①は末日まで、翌日以降は②。日付が空のあいだは、すべて①に数えます。"
+        : "三期制は①〜③です。①は末日まで、翌日以降は②。②の末日の翌日以降は③。日付が空のあいだは、そこから先を分けません。";
+    box.appendChild(hint);
+    return box;
+  }
+
+  async function onTermCountChange(count) {
+    const prev = readTermEnds();
+    if (prev.count === count) return;
+    if (!(await ensureFolder())) {
+      render();
+      return;
+    }
+    const next = { ...prev, count };
+    writeTermEnds(next);
+    try {
+      await saveData();
+      render();
+    } catch (_) {
+      writeTermEnds(prev);
+      render();
+    }
+  }
+
+  async function onTermBoundChange(key, value) {
+    const prev = readTermEnds();
+    const next = { ...prev, [key]: value };
+    if (value && !Attendance.isValidDateStr(value)) {
+      await alertModal("日付を選択してください。");
+      render();
+      return;
+    }
+    if (next.count === 3 && next.second && !next.first) {
+      await alertModal("先に①の末日を入力してください。");
+      render();
+      return;
+    }
+    if (next.count === 3 && next.first && next.second && next.second <= next.first) {
+      await alertModal("②の末日は、①の末日より後の日付にしてください。");
+      render();
+      return;
+    }
+    if (!(await ensureFolder())) {
+      render();
+      return;
+    }
+    writeTermEnds(next);
+    try {
+      await saveData();
+      render();
+    } catch (_) {
+      writeTermEnds(prev);
+      render();
+    }
+  }
+
   function renderConfirm() {
     const panel = document.createElement("div");
     panel.className = "panel";
@@ -950,38 +1083,69 @@
       return;
     }
 
+    const ends = readTermEnds();
+    const terms = visibleTerms(ends);
+    panel.appendChild(renderTermBounds(ends));
+
     const wrap = document.createElement("div");
     wrap.className = "table-wrap confirm-wrap";
     const table = document.createElement("table");
-    table.className = "general confirm-table";
-    table.innerHTML = `<tr>
-      <th class="col-year">年</th>
-      <th class="col-class">組</th>
-      <th class="col-num">番</th>
-      <th class="col-name">氏名</th>
-      <th class="col-count">欠席</th>
-      <th class="col-count">遅刻</th>
-      <th class="col-count">早退</th>
-      <th class="col-count">停忌</th>
-      <th class="col-count">公欠</th>
-    </tr>`;
+    table.className = "general confirm-table confirm-terms";
 
+    const thead = document.createElement("thead");
+    const groupRow = document.createElement("tr");
+    groupRow.innerHTML =
+      `<th class="col-year" rowspan="2">年</th>` +
+      `<th class="col-class" rowspan="2">組</th>` +
+      `<th class="col-num" rowspan="2">番</th>` +
+      `<th class="col-name" rowspan="2">氏名</th>`;
+    terms.forEach((term) => {
+      const th = document.createElement("th");
+      th.className = `term-group term-start term-${term.n}`;
+      th.colSpan = CONFIRM_COUNTS.length;
+      th.textContent = term.mark;
+      groupRow.appendChild(th);
+    });
+    thead.appendChild(groupRow);
+
+    const countRow = document.createElement("tr");
+    terms.forEach((term) => {
+      CONFIRM_COUNTS.forEach(([key, label], i) => {
+        const th = document.createElement("th");
+        th.className =
+          "col-count" +
+          (i === 0 ? ` term-start term-${term.n}` : ` term-${term.n}`);
+        th.textContent = label;
+        countRow.appendChild(th);
+      });
+    });
+    thead.appendChild(countRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
     Roster.sortStudents(course.students).forEach((s) => {
-      const t = Attendance.totalsForStudent(course, s.id);
+      const by = Attendance.totalsByTerm(course, s.id, ends);
       const tr = document.createElement("tr");
       if (s.withdrawnDate) tr.classList.add("withdrawn");
       tr.innerHTML =
         `<td class="col-year">${escapeHtml(s.year)}</td>` +
         `<td class="col-class">${escapeHtml(s.class)}</td>` +
         `<td class="col-num">${escapeHtml(s.number)}</td>` +
-        `<td class="col-name">${escapeHtml(s.name)}</td>` +
-        `<td class="col-count">${t.absent}</td>` +
-        `<td class="col-count">${t.late}</td>` +
-        `<td class="col-count">${t.earlyLeave}</td>` +
-        `<td class="col-count">${t.suspended}</td>` +
-        `<td class="col-count">${t.official}</td>`;
-      table.appendChild(tr);
+        `<td class="col-name">${escapeHtml(s.name)}</td>`;
+      terms.forEach((term) => {
+        const t = by[term.n];
+        CONFIRM_COUNTS.forEach(([key], i) => {
+          const td = document.createElement("td");
+          td.className =
+            "col-count" +
+            (i === 0 ? ` term-start term-${term.n}` : ` term-${term.n}`);
+          td.textContent = String(t[key]);
+          tr.appendChild(td);
+        });
+      });
+      tbody.appendChild(tr);
     });
+    table.appendChild(tbody);
     wrap.appendChild(table);
     panel.appendChild(wrap);
     el.contents.appendChild(panel);
