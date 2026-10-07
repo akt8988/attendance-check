@@ -7,6 +7,7 @@
     { id: "edit", label: "出欠の変更" },
     { id: "roster", label: "名簿データ" },
     { id: "seating", label: "座席の設定" },
+    { id: "purge", label: "データの削除" },
   ];
 
   const state = {
@@ -292,6 +293,18 @@
     el.navi2.innerHTML = "";
     if (!state.main) return;
 
+    if (state.main === "purge") {
+      const a = document.createElement("a");
+      a.href = "#";
+      a.textContent = "全期間データ削除";
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        onPurgeAllAttendance();
+      });
+      el.navi2.appendChild(a);
+      return;
+    }
+
     courses().forEach((c) => {
       const a = document.createElement("a");
       a.href = "#";
@@ -335,8 +348,50 @@
       case "seating":
         renderSeating();
         break;
+      case "purge":
+        renderPurge();
+        break;
       default:
         break;
+    }
+  }
+
+  /* ---------- purge ---------- */
+
+  function renderPurge() {
+    const panel = document.createElement("div");
+    panel.className = "panel";
+    const head = document.createElement("div");
+    head.className = "panel-head";
+    head.innerHTML = `<h2>データの削除</h2>`;
+    panel.appendChild(head);
+    panel.insertAdjacentHTML(
+      "beforeend",
+      `<p class="empty-state">左の「全期間データ削除」で、すべての出欠記録を消せます。名簿と座席は残ります。</p>`
+    );
+    el.contents.appendChild(panel);
+  }
+
+  async function onPurgeAllAttendance() {
+    const ok = await confirmModal("本当に削除しますか？");
+    if (!ok) return;
+    if (!(await ensureFolder())) return;
+
+    const backups = courses().map((course) => ({
+      course,
+      sessions: snapshotSessions(course),
+    }));
+    courses().forEach((course) => {
+      course.sessions = [];
+    });
+    state.marks = {};
+    try {
+      await saveData();
+      await alertModal("出欠記録を削除しました。");
+      render();
+    } catch (_) {
+      backups.forEach(({ course, sessions }) => restoreSessions(course, sessions));
+      render();
     }
   }
 
