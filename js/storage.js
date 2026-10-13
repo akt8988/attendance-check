@@ -152,6 +152,26 @@ const Storage = (() => {
     }
   }
 
+  /**
+   * Remove every trace kept in this browser: the data backup (student names)
+   * and the remembered folder handle. The folder file itself is untouched.
+   * After this, the user must re-pick the data folder.
+   */
+  async function clearLocalBackup() {
+    try {
+      await new Promise((resolve) => {
+        const req = indexedDB.deleteDatabase(DB_NAME);
+        req.onsuccess = () => resolve();
+        req.onerror = () => resolve();
+        req.onblocked = () => resolve();
+      });
+    } catch (_) {
+      /* non-fatal */
+    }
+    dirHandle = null;
+    folderGranted = false;
+  }
+
   function folderUnsupportedMessage() {
     return "このブラウザはフォルダ保存に対応していません。Chrome または Edge で、https:// のページ（またはローカル開発時の http://127.0.0.1）から開いてください。";
   }
@@ -357,6 +377,7 @@ const Storage = (() => {
     pickFolder,
     restoreFolder,
     reconnectFolder,
+    clearLocalBackup,
     init,
     save,
     ensureReady,

@@ -21,13 +21,28 @@ def ensure_data_file() -> None:
         DATA.write_text('{\n  "version": 1,\n  "courses": []\n}\n', encoding="utf-8")
 
 
+def host_is_local(headers) -> bool:
+    """Allow only browsers that reached us as 127.0.0.1/localhost (DNS-rebinding guard)."""
+    host = headers.get("Host", "")
+    hostname = host.rsplit(":", 1)[0].strip("[]") if host else ""
+    return hostname in {"127.0.0.1", "localhost", "::1"}
+
+
 class Handler(SimpleHTTPRequestHandler):
     def end_headers(self) -> None:
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
     def do_GET(self) -> None:
-        if self.path.split("?", 1)[0] == "/api/data":
+        if not host_is_local(self.headers):
+            self.send_error(403, "Forbidden")
+            return
+        path = self.path.split("?", 1)[0]
+        # Never serve the data directory over HTTP (it may contain student PII)
+        if path.startswith("/data/"):
+            self.send_error(403, "Forbidden")
+            return
+        if path == "/api/data":
             body = DATA.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -38,6 +53,9 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_PUT(self) -> None:
+        if not host_is_local(self.headers):
+            self.send_error(403, "Forbidden")
+            return
         if self.path.split("?", 1)[0] != "/api/data":
             self.send_error(404)
             return

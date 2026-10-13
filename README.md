@@ -27,6 +27,8 @@
 - 名簿・出欠の保存先は、選んだデータフォルダ内の `attendance-data.json` だけです
 - Excel の読込・出欠の計算はすべてブラウザ内で行います
 - GitHub Pages に置いているのは HTML/CSS/JS（アプリ本体）だけです
+- 画面表示のため、ブラウザ内（IndexedDB）にも名簿のコピーが残ります。年度末や共用パソコンの利用後は「データの削除」→「端末内バックアップ削除」で消去できます
+- 外部送信を禁止する設定（Content-Security-Policy）をページに入れてあり、万一のスクリプト混入時にも名簿がネットに出ないよう多重化しています
 
 ## 使い方の流れ
 
@@ -64,5 +66,26 @@ chmod +x start.sh
 ```
 
 Windows では `AttendanceCheck.vbs` / `start.bat`（`server.exe`）も利用できます。  
-ブラウザで `http://127.0.0.1:8787/` を開くと、`data/attendance-data.json` に自動保存されます。  
-**学校への配布物には exe / vbs / bat を含めません。**
+ブラウザで `http://127.0.0.1:8787/` を開くと、`data/attendance-data.json` に自動保存されます。
+
+## Windows 試作（専用ウィンドウ）
+
+GitHub Pages が主配布です。学校 PC でオフライン起動を試す場合は、専用ウィンドウの exe もあります。
+
+Mac / Linux で exe を作る:
+
+```bash
+chmod +x desktop/build.sh
+./desktop/build.sh
+```
+
+成果物は `dist/AttendanceCheck.exe` です。この 1 ファイルを USB 等で Windows PC にコピーしてダブルクリックします。
+
+- ブラウザは使わず、専用ウィンドウが開きます
+- 名簿・出欠は exe と同じフォルダの `data/attendance-data.json` に自動保存されます（ネットには送りません）
+- Pages 版で選んだデータフォルダとは別ファイルです。移すときは JSON をコピーしてください
+- 未署名のため、SmartScreen で「Windows によって PC が保護されました」と出ることがあります。その場合は「詳細情報」→「実行」です
+- Microsoft Edge（WebView2）が入っている Windows 10 / 11 が必要です
+- ウイルス対策や学校の実行制限で止まる場合があります。動かなければ GitHub Pages の URL を使ってください
+
+**学校への主配布には exe / vbs / bat を含めません**（Pages の URL を使います）。exe は試作・オフライン確認用です。

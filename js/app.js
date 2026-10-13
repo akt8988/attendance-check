@@ -302,6 +302,14 @@
         onPurgeAllAttendance();
       });
       el.navi2.appendChild(a);
+      const b = document.createElement("a");
+      b.href = "#";
+      b.textContent = "端末内バックアップ削除";
+      b.addEventListener("click", (e) => {
+        e.preventDefault();
+        onClearLocalBackup();
+      });
+      el.navi2.appendChild(b);
       return;
     }
 
@@ -367,9 +375,23 @@
     panel.appendChild(head);
     panel.insertAdjacentHTML(
       "beforeend",
-      `<p class="empty-state">左の「全期間データ削除」で、すべての出欠記録を消せます。名簿と座席は残ります。</p>`
+      `<p class="empty-state">左の「全期間データ削除」で、すべての出欠記録を消せます。名簿と座席は残ります。</p>` +
+        `<p class="empty-state">「端末内バックアップ削除」は、この端末のブラウザ内に残っている名簿・出欠のコピーと、データフォルダの接続情報を消します。年度末や共用パソコンの利用後に使ってください。フォルダ内の attendance-data.json は消えません。</p>`
     );
     el.contents.appendChild(panel);
+  }
+
+  async function onClearLocalBackup() {
+    const ok = await confirmModal(
+      "この端末のブラウザ内に残っている名簿・出欠のバックアップと、データフォルダの接続情報を削除します。フォルダ内の attendance-data.json は消えません。よろしいですか？"
+    );
+    if (!ok) return;
+    await Storage.clearLocalBackup();
+    updateFolderStatus();
+    await alertModal(
+      "端末内のバックアップを削除しました。続けて記録を保存すると新しいバックアップが作られます。次回は「データフォルダ」から保存先を選び直してください。"
+    );
+    render();
   }
 
   async function onPurgeAllAttendance() {
