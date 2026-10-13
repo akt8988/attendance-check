@@ -6,6 +6,9 @@ Thumbs.db
 __pycache__/
 *.pyc
 server.exe
+*.exe
+dist/
+desktop/web/
 *.zip
 *.vbs
 *.bat
