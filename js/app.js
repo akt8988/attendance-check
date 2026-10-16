@@ -54,6 +54,7 @@
   }
 
   function updateFolderStatus() {
+    if (!el.folderStatus) return;
     if (typeof Storage.statusLabel === "function") {
       el.folderStatus.textContent = Storage.statusLabel();
     } else if (Storage.hasFolder()) {
@@ -64,7 +65,9 @@
     const needs = typeof Storage.needsFolder === "function" && Storage.needsFolder();
     const reconnect = needsReconnect();
     el.folderStatus.classList.toggle("folder-needed", needs);
-    el.btnFolder.classList.toggle("folder-needed", needs && !reconnect);
+    if (el.btnFolder) {
+      el.btnFolder.classList.toggle("folder-needed", needs && !reconnect);
+    }
     if (el.btnReconnect) {
       el.btnReconnect.classList.toggle("hidden", !reconnect);
       el.btnReconnect.classList.toggle("folder-needed", reconnect);
@@ -101,6 +104,12 @@
     }
     // Permission often expires after closing the tab; reconnect on this click.
     if (await tryReconnectFolder()) return true;
+    if (typeof Storage.pickFolder !== "function") {
+      await alertModal(
+        typeof Storage.statusLabel === "function" ? Storage.statusLabel() : "保存先に接続できません。"
+      );
+      return false;
+    }
     try {
       await Storage.pickFolder();
       await afterFolderConnected();
@@ -727,8 +736,22 @@
     head.appendChild(actions);
     panel.appendChild(head);
 
+    const hint = document.createElement("p");
+    hint.className = "hint seating-hint";
+    hint.textContent = "名簿の名前を座席へドラッグしてください。座席をタップすると外れます。";
+    panel.appendChild(hint);
+
     const layout = document.createElement("div");
     layout.className = "seating-layout";
+
+    const sorted = Roster.sortStudents(course.students);
+    const seats = ctrl.getSeats();
+    const seated = new Set();
+    for (const row of seats) {
+      for (const v of row) {
+        if (v != null) seated.add(v);
+      }
+    }
 
     const list = document.createElement("div");
     list.className = "student-list";
@@ -736,16 +759,31 @@
     header.className = "student-row header";
     header.innerHTML = `<div>No.</div><div>年</div><div>組</div><div class="col-num">番</div><div>氏名</div>`;
     list.appendChild(header);
-    Roster.sortStudents(course.students).forEach((s, i) => {
+    sorted.forEach((s, i) => {
+      const serial = i + 1;
       const row = document.createElement("div");
-      row.className = "student-row";
+      row.className = "student-row can-drag";
+      row.dataset.serial = String(serial);
       if (s.withdrawnDate) row.classList.add("withdrawn");
+      if (seated.has(serial)) row.classList.add("is-seated");
       row.innerHTML =
-        `<div>${i + 1}</div>` +
+        `<div>${serial}</div>` +
         `<div>${escapeHtml(s.year)}</div>` +
         `<div>${escapeHtml(s.class)}</div>` +
         `<div class="col-num">${escapeHtml(s.number)}</div>` +
         `<div>${escapeHtml(s.name)}</div>`;
+      row.draggable = true;
+      row.addEventListener("dragstart", (e) => {
+        startHtmlDrag(e, { serial: serial, name: s.name, origin: "list" });
+      });
+      row.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        if (e.pointerType !== "mouse") {
+          e.preventDefault();
+          try { row.setPointerCapture(e.pointerId); } catch (_) {}
+        }
+        beginSeatDrag(e, { serial: serial, name: s.name, origin: "list" });
+      });
       list.appendChild(row);
     });
 
@@ -754,31 +792,214 @@
     gridWrap.innerHTML = `<div class="perspective-label">黒板側</div>`;
     const grid = document.createElement("div");
     grid.className = "seat-grid setup";
-    const seats = ctrl.getSeats();
     for (let r = 0; r < Seating.ROWS; r++) {
       for (let c = 0; c < Seating.COLS; c++) {
         const cell = document.createElement("button");
         cell.type = "button";
         cell.className = "seat-cell";
+        cell.dataset.seat = "1";
+        cell.dataset.row = String(r);
+        cell.dataset.col = String(c);
         const v = seats[r][c];
-        if (v != null) {
+        const stu = v != null ? Seating.studentBySerial(course, v, sorted) : null;
+        if (stu) {
+          cell.classList.add("filled");
+          if (stu.withdrawnDate) cell.classList.add("withdrawn");
+          cell.innerHTML =
+            `<span class="seat-meta">${escapeHtml(Roster.labelStudent(stu))}</span>` +
+            `<span class="seat-name">${escapeHtml(stu.name)}</span>`;
+          cell.draggable = true;
+          cell.addEventListener("dragstart", (e) => {
+            startHtmlDrag(e, {
+              serial: v,
+              name: stu.name,
+              origin: "seat",
+              row: r,
+              col: c,
+            });
+          });
+          cell.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0) return;
+            if (e.pointerType !== "mouse") {
+              e.preventDefault();
+              try { cell.setPointerCapture(e.pointerId); } catch (_) {}
+            }
+            beginSeatDrag(e, {
+              serial: v,
+              name: stu.name,
+              origin: "seat",
+              row: r,
+              col: c,
+            });
+          });
+        } else if (v != null) {
           cell.textContent = String(v);
           cell.classList.add("filled");
-        } else {
-          cell.textContent = "";
         }
-        cell.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (ctrl.place(r, c)) {
-            // Keep editing the same course controller after re-render
-            render();
-          }
-        });
         grid.appendChild(cell);
       }
     }
     gridWrap.appendChild(grid);
+
+    let seatDrag = null;
+    let htmlDrag = null;
+    let nativeDrag = false;
+
+    function clearDragMarks() {
+      layout.querySelectorAll(".drag-over").forEach((node) => node.classList.remove("drag-over"));
+    }
+
+    function dragGhost(e, name) {
+      const ghost = document.createElement("div");
+      ghost.className = "seat-drag-ghost";
+      ghost.textContent = name;
+      ghost.style.left = "-1000px";
+      ghost.style.top = "0";
+      document.body.appendChild(ghost);
+      e.dataTransfer.setDragImage(ghost, 8, 8);
+      setTimeout(() => ghost.remove(), 0);
+    }
+
+    function startHtmlDrag(e, payload) {
+      nativeDrag = true;
+      htmlDrag = payload;
+      e.dataTransfer.setData("text/plain", String(payload.serial));
+      e.dataTransfer.effectAllowed = "move";
+      dragGhost(e, payload.name);
+      window.addEventListener(
+        "dragend",
+        () => {
+          htmlDrag = null;
+          clearDragMarks();
+        },
+        { once: true }
+      );
+    }
+
+    list.addEventListener("dragover", (e) => {
+      if (!htmlDrag || htmlDrag.origin !== "seat") return;
+      e.preventDefault();
+      clearDragMarks();
+      list.classList.add("drag-over");
+    });
+    list.addEventListener("drop", (e) => {
+      if (!htmlDrag || htmlDrag.origin !== "seat") return;
+      e.preventDefault();
+      const src = htmlDrag;
+      htmlDrag = null;
+      clearDragMarks();
+      if (ctrl.clearAt(src.row, src.col)) render();
+    });
+
+    grid.addEventListener("dragover", (e) => {
+      const seat = e.target.closest(".seat-cell");
+      if (!seat || !htmlDrag) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      clearDragMarks();
+      seat.classList.add("drag-over");
+    });
+    grid.addEventListener("drop", (e) => {
+      const seat = e.target.closest(".seat-cell");
+      if (!seat || !htmlDrag) return;
+      e.preventDefault();
+      const serial = htmlDrag.serial;
+      htmlDrag = null;
+      clearDragMarks();
+      if (ctrl.assign(Number(seat.dataset.row), Number(seat.dataset.col), serial)) render();
+    });
+    grid.addEventListener("dragleave", (e) => {
+      const seat = e.target.closest(".seat-cell");
+      if (seat) seat.classList.remove("drag-over");
+    });
+
+    function beginSeatDrag(e, payload) {
+      if (seatDrag) return;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const pointerId = e.pointerId;
+      let moved = false;
+      let ghost = null;
+
+      function clearMarks() {
+        layout.querySelectorAll(".drag-over").forEach((node) => node.classList.remove("drag-over"));
+      }
+
+      function targetAt(x, y) {
+        if (ghost) ghost.hidden = true;
+        const node = document.elementFromPoint(x, y);
+        if (ghost) ghost.hidden = false;
+        if (!node) return null;
+        const seat = node.closest(".seat-grid.setup .seat-cell");
+        if (seat && layout.contains(seat)) {
+          return {
+            kind: "seat",
+            row: Number(seat.dataset.row),
+            col: Number(seat.dataset.col),
+            el: seat,
+          };
+        }
+        if (list.contains(node)) return { kind: "list", el: list };
+        return null;
+      }
+
+      function onMove(ev) {
+        if (ev.pointerId !== pointerId) return;
+        const dx = ev.clientX - startX;
+        const dy = ev.clientY - startY;
+        if (!moved) {
+          if (Math.hypot(dx, dy) < 6) return;
+          moved = true;
+          ghost = document.createElement("div");
+          ghost.className = "seat-drag-ghost";
+          ghost.textContent = payload.name;
+          document.body.appendChild(ghost);
+          if (payload.origin === "list") {
+            const source = list.querySelector(`[data-serial="${payload.serial}"]`);
+            if (source) source.classList.add("drag-source");
+          }
+        }
+        ev.preventDefault();
+        ghost.style.left = ev.clientX + "px";
+        ghost.style.top = ev.clientY + "px";
+        clearMarks();
+        const hit = targetAt(ev.clientX, ev.clientY);
+        if (!hit) return;
+        if (hit.kind === "seat" || (hit.kind === "list" && payload.origin === "seat")) {
+          hit.el.classList.add("drag-over");
+        }
+      }
+
+      function finish(ev) {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", finish);
+        window.removeEventListener("pointercancel", finish);
+        clearMarks();
+        if (ghost) ghost.remove();
+        ghost = null;
+        seatDrag = null;
+        if (nativeDrag) return;
+        if (!ev || ev.type === "pointercancel" || ev.pointerId !== pointerId) return;
+        if (!moved) {
+          if (payload.origin === "seat" && ctrl.clearAt(payload.row, payload.col)) render();
+          return;
+        }
+        const hit = targetAt(ev.clientX, ev.clientY);
+        if (hit && hit.kind === "seat") {
+          if (ctrl.assign(hit.row, hit.col, payload.serial)) render();
+          return;
+        }
+        if (hit && hit.kind === "list" && payload.origin === "seat") {
+          if (ctrl.clearAt(payload.row, payload.col)) render();
+        }
+      }
+
+      nativeDrag = false;
+      seatDrag = true;
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", finish);
+      window.addEventListener("pointercancel", finish);
+    }
     const desk = document.createElement("div");
     desk.className = "teacher-desk";
     desk.textContent = "教卓";
@@ -1460,15 +1681,17 @@
 
   /* ---------- boot ---------- */
 
-  el.btnFolder.addEventListener("click", async () => {
-    try {
-      await Storage.pickFolder();
-      await afterFolderConnected();
-    } catch (err) {
-      if (err && err.name === "AbortError") return;
-      await alertModal(err.message || String(err));
-    }
-  });
+  if (el.btnFolder) {
+    el.btnFolder.addEventListener("click", async () => {
+      try {
+        await Storage.pickFolder();
+        await afterFolderConnected();
+      } catch (err) {
+        if (err && err.name === "AbortError") return;
+        await alertModal(err.message || String(err));
+      }
+    });
+  }
 
   if (el.btnReconnect) {
     el.btnReconnect.addEventListener("click", async () => {

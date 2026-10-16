@@ -269,6 +269,29 @@ table.general tr:first-child th {
   font-style: italic;
 }
 
+.student-row.can-drag {
+  cursor: grab;
+  touch-action: none;
+}
+
+.student-row.is-seated {
+  background: #f3f3f3;
+}
+
+.student-row.drag-source {
+  opacity: 0.45;
+}
+
+.student-list.drag-over {
+  outline: 2px solid #000;
+  outline-offset: -2px;
+}
+
+.seating-hint {
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+
 /* confirm / roster: compact fixed tables (not full-bleed) */
 .confirm-wrap,
 .roster-wrap {
@@ -434,22 +457,46 @@ table.edit-matrix td.locked-cell {
   font-size: 11px;
 }
 
-/* seating setup layout */
+/* seating setup layout — roster and chart sit side by side */
 .seating-layout {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(220px, 280px) 1fr;
-  gap: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 5em;
+  overflow: auto;
+}
+
+.seating-layout .student-list {
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: none;
+  max-height: 100%;
+}
+
+.seating-layout .student-row {
+  grid-template-columns: 2.5em 2.2em 2.2em 2.5em max-content;
+  padding-right: 1em;
+}
+
+.seating-layout .student-row > :nth-child(5) {
+  white-space: nowrap;
+}
+
+.seat-grid-wrap .teacher-desk {
+  width: calc(72px * 6 + 6px * 5);
+  max-width: none;
 }
 
 .seat-grid-wrap {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   justify-content: flex-start;
   gap: 6px;
   min-height: 0;
+  flex: 0 0 auto;
+  max-height: 100%;
 }
 
 .seat-grid {
@@ -458,7 +505,9 @@ table.edit-matrix td.locked-cell {
 }
 
 .seat-grid.setup {
-  grid-template-columns: repeat(6, 28px);
+  grid-template-columns: repeat(6, 72px);
+  gap: 6px;
+  width: calc(72px * 6 + 6px * 5);
 }
 
 .seat-cell {
@@ -477,9 +526,43 @@ table.edit-matrix td.locked-cell {
 }
 
 .seat-grid.setup .seat-cell {
-  width: 28px;
-  height: 28px;
+  width: 72px;
+  height: 44px;
+  font-size: 10px;
+  line-height: 1.1;
+  padding: 2px;
+  cursor: default;
+}
+
+.seat-grid.setup .seat-cell.filled {
+  cursor: grab;
+  touch-action: none;
+}
+
+.seat-grid.setup .seat-meta {
+  font-size: 8px;
+}
+
+.seat-grid.setup .seat-name {
   font-size: 11px;
+  margin-top: 1px;
+}
+
+.seat-cell.drag-over {
+  background: #DAF71E;
+}
+
+.seat-drag-ghost {
+  position: fixed;
+  z-index: 40;
+  pointer-events: none;
+  transform: translate(10px, 10px);
+  padding: 4px 8px;
+  border: 1px solid #000;
+  background: #fff;
+  font-size: 12px;
+  font-weight: bold;
+  white-space: nowrap;
 }
 
 .seat-cell.filled {
@@ -847,15 +930,6 @@ table.edit-matrix select.status-official {
 
   .seat-name {
     font-size: 12px;
-  }
-
-  .seat-grid.setup {
-    grid-template-columns: repeat(6, 26px);
-  }
-
-  .seat-grid.setup .seat-cell {
-    width: 26px;
-    height: 26px;
   }
 }
 

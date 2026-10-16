@@ -18,5 +18,9 @@ tools/
 # Local attendance data (may contain student PII)
 data/attendance-data.json
 
+# Apps Script project id for the local trial (not the source)
+gas/.clasp.json
+gas/dist/
+
 # Optional local notes
 HANDOFF-distribution.md

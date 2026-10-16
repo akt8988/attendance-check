@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light only" />
+  <meta name="theme-color" content="#DAF71E" />
+  <title>出欠管理</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23DAF71E'/%3E%3C/svg%3E" />
+  <style>
+    <?!= include('css'); ?>
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header id="header">
+      <div id="logo">出欠管理</div>
+      <div id="folder-bar">
+        <span id="folder-status">読み込み中…</span>
+      </div>
+    </header>
+
+    <div id="body">
+      <nav id="navigation">
+        <div id="navi1"></div>
+        <div id="navi2"></div>
+      </nav>
+      <main id="contents"></main>
+    </div>
+  </div>
+
+  <div id="modal" class="hidden" role="dialog" aria-modal="true">
+    <div id="modal-panel">
+      <p id="modal-message"></p>
+      <div id="modal-input-wrap" class="hidden">
+        <input type="text" id="modal-input" maxlength="40" />
+      </div>
+      <div id="modal-actions"></div>
+    </div>
+  </div>
+
+  <script><?!= include('xlsx'); ?></script>
+  <script><?!= include('storage'); ?></script>
+  <script><?!= include('roster'); ?></script>
+  <script><?!= include('seating'); ?></script>
+  <script><?!= include('attendance'); ?></script>
+  <script><?!= include('app'); ?></script>
+</body>
+</html>

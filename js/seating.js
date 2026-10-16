@@ -58,27 +58,36 @@ const Seating = (() => {
   function createController(course) {
     let seats = normalize(course.seats);
     const history = [];
-    const studentCount = () => (course.students || []).length;
 
     function snapshot() {
       history.push(cloneSeats(seats));
     }
 
-    function place(row, col) {
-      if (!seats[row]) return false;
-      const current = seats[row][col];
-
-      // Tap filled seat to clear (so layout can be changed)
-      if (current != null) {
-        snapshot();
-        seats[row][col] = null;
-        return true;
+    function findSerial(serial) {
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (seats[r][c] === serial) return { r: r, c: c };
+        }
       }
+      return null;
+    }
 
-      const serial = nextSerial(seats, studentCount());
-      if (serial == null) return false;
+    /** Place a roster serial. Moves it if already seated; swaps when the target is taken. */
+    function assign(row, col, serial) {
+      if (!seats[row] || serial == null || serial < 1) return false;
+      const occupant = seats[row][col];
+      const from = findSerial(serial);
+      if (from && from.r === row && from.c === col) return false;
       snapshot();
+      if (from) seats[from.r][from.c] = occupant;
       seats[row][col] = serial;
+      return true;
+    }
+
+    function clearAt(row, col) {
+      if (!seats[row] || seats[row][col] == null) return false;
+      snapshot();
+      seats[row][col] = null;
       return true;
     }
 
@@ -101,7 +110,7 @@ const Seating = (() => {
       return history.length > 0;
     }
 
-    return { place, undo, clearAll, getSeats, canUndo, COLS, ROWS };
+    return { assign, clearAt, undo, clearAll, getSeats, canUndo, COLS, ROWS };
   }
 
   return {
